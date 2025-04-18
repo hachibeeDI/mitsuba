@@ -1,0 +1,11 @@
+{
+  "name": "mitsuba",
+  "version": "0.0.1",
+  "main": "dist/esm/index.js",
+  "scripts": {
+    "test": "test"
+  },
+  "author": "OguraDaiki",
+  "license": "ISC",
+  "description": ""
+}
