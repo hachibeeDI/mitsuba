@@ -50,10 +50,12 @@
     "@biomejs/biome": "^1.9.4",
     "@types/amqplib": "^0.10.7",
     "@types/node": "^22.14.1",
+    "@types/uuid": "^10.0.0",
     "fp-ts": "^2.16.9",
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "amqplib": "^0.10.7"
+    "amqplib": "^0.10.7",
+    "uuid": "^11.1.0"
   }
 }
