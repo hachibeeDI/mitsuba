@@ -1,20 +1,50 @@
 {
   "name": "mitsuba",
   "version": "0.0.1",
-  "main": "dist/esm/index.js",
-  "scripts": {
-    "test": "test"
+  "description": "Celery port for TypeScript",
+  "sideEffects": false,
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.ts",
+        "default": "./dist/cjs/index.js"
+      },
+      "default": "./dist/cjs/index.js"
+    }
   },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "celery",
+    "typescript",
+    "task",
+    "queue",
+    "amqp",
+    "rabbitmq"
+  ],
   "author": "OguraDaiki",
   "license": "ISC",
-  "description": "",
-  "dependencies": {
-    "amqplib": "^0.10.7"
-  },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
+    "@types/amqplib": "^0.10.7",
     "@types/node": "^22.14.1",
-    "typescript": "^5.8.3",
-    "vitest": "^3.1.1"
+    "fp-ts": "^2.16.9",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "amqplib": "^0.10.7"
   }
 }
