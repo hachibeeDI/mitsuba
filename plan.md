@@ -98,4 +98,9 @@ async function main() {
   // 1 + 2 + 3 = 6
   console.log(await result.promise());
 }
+
+// should be in other file and other machine
+async function worker() {
+  await tasks.startWorker();
+}
 ```
