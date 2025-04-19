@@ -25,7 +25,7 @@ Mitsuba aims to a port library for TypeScript.
 Simplest example:
 
 ```typescript
-import {Mitsuba, Task} from 'mitsuba';
+import {mitsuba, Task} from 'mitsuba';
 import {chord, sequence} from 'mitsuba/functional';
 // or any other library
 import {pipe} from 'fp-ts/function';
@@ -52,7 +52,7 @@ const tasks = app.createTask({
     opts: {priority: 10, retryDeley: 30 * 60},
     boundC: (self, token: string, content: string) => {
       try {
-        postToSomeOtherService(token, content);
+        await postToSomeOtherService(token, content);
       } catch(e) {
         throw self.retry({cause: e});
       }
@@ -68,9 +68,9 @@ const tasks = app.createTask({
         // or give function
         (e): e is KnownException => true],
     },
-    boundC: (self, token: string, content: string) => {
+    boundC: async (self, token: string, content: string) => {
       try {
-        postToSomeOtherService(token, content);
+        await postToSomeOtherService(token, content);
       } catch(e) {
         throw self.retry({cause: e});
       }
@@ -81,11 +81,11 @@ const tasks = app.createTask({
 // main
 async function main() {
   const greetings = tasks.greetings();
-  console.log(await task.promise()); // Hello world!
+  console.log(await greetings.promise()); // Hello world!
 
   const numbers: ReadonlyArray<AsyncTask<number>> = Array(3)
     .keys()
-    .map(i => add(1, i));
+    .map(i => tasks.add(1, i));
 
   // equivalent of sum(chord(sequence(numbers)))
   const result = pipe(
@@ -93,7 +93,7 @@ async function main() {
     // `ReadonlyArray<AsyncTask<number>>` -> `AsyncTask<ReadonlyArray<number>>`
     sequence,
     chord,
-    sum,
+    tasks.sum,
   );
   // 1 + 2 + 3 = 6
   console.log(await result.promise());
