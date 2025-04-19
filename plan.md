@@ -30,7 +30,7 @@ import {chord, sequence} from 'mitsuba/functional';
 // or any other library
 import {pipe} from 'fp-ts/function';
 
-const app = Mitsuba(
+const app = mitsuba(
   'project-name',
   {
     broker='amqp://localhost//',

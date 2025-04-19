@@ -5,54 +5,17 @@ export type MitsubaApp = {
   readonly appName: string;
 };
 
-/** Represents the interface for a message broker backend. */
-export type BrokerBackend = {
-  /** Connects to the broker. */
-  connect(): Promise<void>;
-  /** Disconnects from the broker. */
-  disconnect(): Promise<void>;
-  /**
-   * Publishes a message to the specified queue.
-   * @param queueName The name of the queue to publish to.
-   * @param message The message content as a Buffer.
-   * @param options Optional publishing options.
-   * @returns A promise resolving to true if successful, false otherwise.
-   */
-  publish(queueName: string, message: Buffer, options?: any): Promise<boolean>;
-  // Potentially add methods for consuming tasks (for workers)
-};
-
-/** Represents the interface for a result storage backend. */
-export type BackendBackend = {
-  /** Connects to the result backend. */
-  connect(): Promise<void>;
-  /** Disconnects from the result backend. */
-  disconnect(): Promise<void>;
-  /**
-   * Stores the result of a task.
-   * @param taskId The unique ID of the task.
-   * @param result The result data to store.
-   * @param expiresIn Optional expiration time in seconds.
-   */
-  storeResult(taskId: string, result: any, expiresIn?: number): Promise<void>; // expiresIn in seconds
-  /**
-   * Retrieves the result of a task.
-   * @param taskId The unique ID of the task.
-   * @returns A promise resolving to the result or null if not found.
-   */
-  getResult(taskId: string): Promise<any | null>;
-  // TODO: Add methods for state tracking?
-};
-
 /** Supported broker/backend protocols. */
 type SupportedProtocol = 'amqp'; // | 'redis' | 'sqs' | 'kafka' | 'nats' | 'mqtt' | 'ws' | 'wss' | 'ws+json' | 'wss+json' | 'ws+binary' | 'wss+binary' | 'ws+text' | 'wss+text' | 'ws+json-rpc' | 'wss+json-rpc' | 'ws+binary-rpc' | 'wss+binary-rpc' | 'ws+text-rpc' | 'wss+text-rpc';
+
+export type URI = `${SupportedProtocol}://${string}`;
 
 /** Configuration options for a Mitsuba instance. */
 export type MitsubaOptions = {
   /** Connection string for the message broker. */
-  broker: `${SupportedProtocol}://${string}`;
+  broker: URI;
   /** Connection string for the result backend. */
-  backend: `${SupportedProtocol}://${string}`;
+  backend: URI;
   /** Modules to import tasks from */
   include?: ReadonlyArray<string>;
   /** Default expiration for results in seconds */
@@ -62,12 +25,81 @@ export type MitsubaOptions = {
   /** Add other Celery-like options as needed */
 };
 
+/** Represents the interface for a message broker backend. */
+export type Broker = {
+  /** Connects to the broker. */
+  connect(): Promise<void>;
+  /** Disconnects from the broker. */
+  disconnect(): Promise<void>;
+  [Symbol.asyncDispose](): Promise<void>;
+
+  /**
+   * Publishes a message to the specified queue.
+   * @param queueName The name of the queue to publish to.
+   * @param message The message content as a Buffer.
+   * @param options Optional publishing options.
+   * @returns A promise resolving to true if successful, false otherwise.
+   */
+  publish(taskId: string, message: Buffer, options?: any): Promise<void>;
+  // Potentially add methods for consuming tasks (for workers)
+};
+
+/** Represents the interface for a result storage backend. */
+export type Backend = {
+  /** Connects to the result backend. */
+  connect(): Promise<void>;
+  /** Disconnects from the result backend. */
+  disconnect(): Promise<void>;
+  [Symbol.asyncDispose](): Promise<void>;
+
+  /**
+   * Get a task result
+   * @param taskId The ID of the task
+   * @returns The task result
+   */
+  get(taskId: string): Promise<string>;
+  /**
+   * Store a task result
+   * @param taskId The ID of the task
+   * @param result The task result
+   */
+  store(taskId: string, result: string): Promise<void>;
+  /**
+   * Forget a task result
+   * @param taskId The ID of the task
+   */
+  forget(taskId: string): Promise<void>;
+  /**
+   * Revoke a task
+   * @param taskId The ID of the task
+   */
+  revoke(taskId: string): Promise<void>;
+};
+
+export type SendMessage = {
+  id: string;
+  name: string;
+  args: ReadonlyArray<any>;
+  options?: TaskOptions;
+};
+
+export type ReturnMessage<R> = {
+  id: string;
+  name: string;
+  result: ReadonlyArray<R>;
+};
+
 /** Represents an asynchronous task result */
-export type AsyncTask<T> = {
+export type TaskResult<R> = {
+  readonly taskName: string;
   /** The unique ID of the task. */
   readonly taskId: string;
   /** Returns a promise that resolves with the task result. */
-  promise(): Promise<T>;
+  promise(): Promise<R>;
+  /** alias of promise()*/
+  get(): Promise<R>;
+  /** Retries the task. */
+  retry(): Promise<R>;
   // get(): Promise<T>; // Alias for promise()
   /** Remove result from backend */
   forget(): Promise<void>;
@@ -91,17 +123,17 @@ export type TaskOptions = {
 };
 
 /** Structure for defining a task. Can be a simple function, or an object with call/options or boundC/options. */
-export type TaskDefinition<C extends (...args: ReadonlyArray<any>) => any = (...args: ReadonlyArray<any>) => any> =
-  | C
+export type TaskDefinition<Args extends ReadonlyArray<any>, R> =
+  | ((...args: Args) => Promise<R>)
   | {
       /** The task function to be executed. */
-      call: C;
+      call: (...args: Args) => Promise<R>;
       /** Task-specific options. */
       opts?: TaskOptions;
     }
   | {
       /** A bound task function that receives the BoundTask instance as the first argument. */
-      boundC: (self: BoundTask, ...args: Parameters<C>) => ReturnType<C>;
+      boundC: (self: BoundTask, ...args: Args) => Promise<R>;
       /** Task-specific options. */
       opts?: TaskOptions;
     };
@@ -121,16 +153,22 @@ export type BoundTask = {
   // Add other context methods if needed (e.g., update_state)
 };
 
-/** Type for the object returned by `createTask`, mapping task names to callable functions that return AsyncTask. */
-export type TaskCollection<T extends Record<string, TaskDefinition>> = {
-  [K in keyof T]: T[K] extends (...args: infer A) => infer R
-    ? /** Callable function representing a simple task. */
-      (...args: A) => AsyncTask<R> // Simple function case
-    : T[K] extends {call: (...args: infer A) => infer R; opts?: TaskOptions}
-      ? /** Callable function representing a task defined with `{ call, opts }`. */
-        (...args: A) => AsyncTask<R> // { call, opts } case
-      : T[K] extends {boundC: (self: BoundTask, ...args: infer A) => infer R; opts?: TaskOptions}
-        ? /** Callable function representing a task defined with `{ boundC, opts }`. */
-          (...args: A) => AsyncTask<R> // { boundC, opts } case
-        : never;
+export type Worker = {
+  start(): Promise<void>;
+  stop(): Promise<void>;
+  [Symbol.asyncDispose](): Promise<void>;
 };
+
+// /** Type for the object returned by `createTask`, mapping task names to callable functions that return AsyncTask. */
+// export type TaskCollection<T extends Record<string, TaskDefinition>> = {
+//   [K in keyof T]: T[K] extends (...args: infer A) => infer R
+//     ? /** Callable function representing a simple task. */
+//       (...args: A) => AsyncTask<R> // Simple function case
+//     : T[K] extends {call: (...args: infer A) => infer R; opts?: TaskOptions}
+//       ? /** Callable function representing a task defined with `{ call, opts }`. */
+//         (...args: A) => AsyncTask<R> // { call, opts } case
+//       : T[K] extends {boundC: (self: BoundTask, ...args: infer A) => infer R; opts?: TaskOptions}
+//         ? /** Callable function representing a task defined with `{ boundC, opts }`. */
+//           (...args: A) => AsyncTask<R> // { boundC, opts } case
+//         : never;
+// };
