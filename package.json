@@ -24,8 +24,17 @@
     "src"
   ],
   "scripts": {
-    "build": "tsc",
-    "test": "vitest run"
+    "check:type": "tsc -p tsconfig.mjs.json --noEmit",
+    "check:lint": "biome lint src/ --vcs-use-ignore-file=true",
+    "check:style": "biome format src/ --vcs-use-ignore-file=true",
+    "check-all": "npm run check:type && npm run check:lint && npm run check:style",
+    "fix:lint": "npm run check:lint -- --fix",
+    "fix:style": "npm run check:style -- --write",
+    "fix-all": "npm run fix:style && npm run fix:lint",
+    "build": "npm run build:cjs && npm run build:esm",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "build:esm": "tsc -p tsconfig.mjs.json",
+    "prepublish": "npm run build"
   },
   "keywords": [
     "celery",

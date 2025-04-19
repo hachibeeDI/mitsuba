@@ -79,7 +79,6 @@
       },
       "style": {
         "recommended": true,
-        "useNodejsImportProtocol": "on",
         "noUselessElse": "error",
         "noCommaOperator": "error",
         "noDefaultExport": "off",
