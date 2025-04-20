@@ -35,17 +35,28 @@ export interface AsyncTask<T> {
   retry(options?: ErrorOptions): never;
 }
 
+export type TaskFunc<Args extends ReadonlyArray<unknown>, R> = {
+  opts?: TaskOptions;
+  call: (...args: Args) => R;
+};
+
 /**
  * タスク定義レジストリ
  * システムに登録する処理関数のマッピング
  */
-export type TaskRegistry<T extends Record<string, unknown>> = {
-  [K in keyof T]:
-    | {
-        opts?: TaskOptions;
-        call: (...args: Array<unknown>) => unknown;
-      }
-    | ((...args: Array<unknown>) => unknown);
+export type TaskRegistry<
+  Keys extends string,
+  Fns extends (...args: ReadonlyArray<any>) => any | TaskFunc<ReadonlyArray<any>, any>,
+> = Record<Keys, Fns>;
+
+type TaskPublisher<Args extends ReadonlyArray<unknown>, R> = (...args: Args) => AsyncTask<R>;
+
+export type CreatedTask<T extends TaskRegistry<never, never>> = {
+  [K in keyof T]: T[K] extends (...args: infer Args) => infer R
+    ? TaskPublisher<Args, R>
+    : T[K] extends TaskFunc<infer Args, infer R>
+      ? TaskPublisher<Args, R>
+      : never;
 };
 
 /**

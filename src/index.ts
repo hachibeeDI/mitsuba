@@ -11,6 +11,8 @@ import type {
   TaskOptions,
   TaskStatus,
   TaskPayload,
+  TaskFunc,
+  CreatedTask,
 } from './types';
 import {AMQPBroker} from './brokers/amqp';
 import {AMQPBackend} from './backends/amqp';
@@ -21,25 +23,20 @@ import {getLogger} from './logger';
  * Publisher側で使用するAsyncTask実装
  */
 class TaskPromiseWrapper<T> implements AsyncTask<T> {
-  private readonly taskPromise: Promise<string>;
+  readonly id: string;
   private readonly backend: BackendInterface;
 
-  constructor(taskIdPromise: Promise<string>, backend: BackendInterface) {
-    this.taskPromise = taskIdPromise;
+  constructor(id: string, backend: BackendInterface) {
+    this.id = id;
     this.backend = backend;
   }
 
-  get id(): string {
-    throw new Error('Cannot access task ID synchronously. Use promise() instead.');
-  }
-
-  async promise(): Promise<T> {
-    const taskId = await this.taskPromise;
-    return this.backend.getResult<T>(taskId);
+  promise(): Promise<T> {
+    return this.backend.getResult<T>(this.id);
   }
 
   async status(): Promise<TaskStatus> {
-    const taskId = await this.taskPromise;
+    const taskId = await this.id;
     try {
       await this.backend.getResult<T>(taskId);
       return 'SUCCESS';
@@ -135,36 +132,36 @@ export class Mitsuba {
    * @param registry - タスクレジストリ
    * @returns タスク実行関数マップとワーカーオブジェクト
    */
-  createTask<T extends TaskRegistry<T>>(
+  createTask<const T extends TaskRegistry<string, any>>(
     registry: T,
   ): {
-    tasks: {[K in keyof T]: (...args: Array<unknown>) => AsyncTask<unknown>};
+    tasks: CreatedTask<T>;
     worker: {
       start: (concurrency?: number) => Promise<void>;
       stop: () => Promise<void>;
     };
   } {
-    const tasks = {} as {[K in keyof T]: (...args: Array<unknown>) => AsyncTask<unknown>};
+    const tasks = {} as CreatedTask<T>;
     const registeredTaskNames: Array<string> = [];
 
     for (const [taskName, task] of Object.entries(registry)) {
       registeredTaskNames.push(taskName);
       if (typeof task === 'function') {
-        tasks[taskName as keyof T] = (...args: Array<unknown>): AsyncTask<unknown> => {
-          const taskId = this.broker.publishTask(taskName, args, undefined);
+        // can't be typesafe
+        (tasks as any)[taskName] = async (...args: ReadonlyArray<unknown>) => {
+          const taskId = await this.broker.publishTask(taskName, args, undefined);
           return new TaskPromiseWrapper(taskId, this.backend);
         };
       } else {
-        // タスクがオブジェクトの場合
-        const taskObj = task as {opts?: TaskOptions; call: (...args: Array<unknown>) => unknown};
-        tasks[taskName as keyof T] = (...args: Array<unknown>): AsyncTask<unknown> => {
-          const taskId = this.broker.publishTask(taskName, args, taskObj.opts);
+        const taskObj = task as {opts?: TaskOptions; call: (...args: ReadonlyArray<unknown>) => unknown};
+        // can't be typesafe
+        (tasks as any)[taskName as keyof T] = async (...args: ReadonlyArray<unknown>) => {
+          const taskId = await this.broker.publishTask(taskName, args, taskObj.opts);
           return new TaskPromiseWrapper(taskId, this.backend);
         };
       }
     }
 
-    // タスクハンドラー関数を作成
     const taskHandler = async (payload: TaskPayload): Promise<unknown> => {
       const {taskName, args} = payload;
       const taskDef = registry[taskName as keyof T];
@@ -180,25 +177,25 @@ export class Mitsuba {
       return await Promise.resolve(taskDef.call(...args));
     };
 
-    // ワーカーオブジェクトを作成
-    const worker = {
-      start: async (concurrency = 1): Promise<void> => {
-        // 既存のworkerPoolを使用するか、新しく作成する
-        if (!this.workerPool) {
-          this.workerPool = new WorkerPool(this.broker, this.backend, taskHandler);
-        }
-        return await this.workerPool.start(registeredTaskNames, concurrency);
-      },
-      stop: async (): Promise<void> => {
-        if (this.workerPool) {
-          await this.workerPool.stop();
-          this.workerPool = null;
-        }
-        return Promise.resolve();
+    return {
+      tasks: tasks as any,
+      worker: {
+        start: async (concurrency = 1): Promise<void> => {
+          // 既存のworkerPoolを使用するか、新しく作成する
+          if (!this.workerPool) {
+            this.workerPool = new WorkerPool(this.broker, this.backend, taskHandler);
+          }
+          return await this.workerPool.start(registeredTaskNames, concurrency);
+        },
+        stop: async (): Promise<void> => {
+          if (this.workerPool) {
+            await this.workerPool.stop();
+            this.workerPool = null;
+          }
+          return Promise.resolve();
+        },
       },
     };
-
-    return {tasks, worker};
   }
 
   /**

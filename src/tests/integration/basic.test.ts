@@ -55,27 +55,19 @@ describe('Mitsuba 基本機能テスト', () => {
 
   // 基本的なタスク実行と結果取得のテスト
   test('基本的なタスク実行と結果取得', async () => {
-    // 1. タスク定義
-    const addTask = async (a: number, b: number) => a + b;
-
-    // 2. タスクとワーカーの作成
     const {tasks, worker} = mitsuba.createTask({
-      addTask,
-    });
+      addTask: (a: number, b: number) => a + b,
+      addTask2: (a: number, b: string) => a + b,
+      asString: {
+        opts: {priority: 10},
+        call: (a: number) => a.toString(),
+      },
+    } as const);
 
-    // 3. ワーカーを起動 - ノンブロッキングになっているので待機不要
     await worker.start(1);
-
-    // 4. タスク実行
     const task = tasks.addTask(3, 4);
-
-    // 5. 結果取得（タスクが実行されるまで待機）
     const result = await task.promise();
-
-    // 6. ワーカーを停止
     await worker.stop();
-
-    // 7. 結果確認
     expect(result).toBe(7);
   });
 
