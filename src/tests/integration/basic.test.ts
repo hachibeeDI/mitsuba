@@ -116,7 +116,7 @@ describe('Mitsuba 基本機能テスト', () => {
     expect(result).toBe(30);
 
     // 7. タスクIDを取得してバックエンドから直接確認
-    const taskId = await (task as any).taskPromise;
+    const taskId = await task.getTaskId();
     const resultFromBackend = await mockBackend.getResult(taskId);
     expect(resultFromBackend).toBe(30);
   });

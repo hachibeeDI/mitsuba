@@ -15,9 +15,11 @@ export function generateTaskId(prefix = ''): TaskId {
  * @returns 結果配列のAsyncTask
  */
 export function sequence<T>(tasks: ReadonlyArray<AsyncTask<T>>): AsyncTask<ReadonlyArray<T>> {
+  const taskId = generateTaskId('sequence-')
   // 空の配列に対しては即座に成功結果を返す
   if (tasks.length === 0) {
     return {
+      getTaskId: () => Promise.resolve(taskId),
       get: async () => [],
       status: async () => 'SUCCESS',
       retry: () => {
@@ -32,6 +34,7 @@ export function sequence<T>(tasks: ReadonlyArray<AsyncTask<T>>): AsyncTask<Reado
 
   // 結果を格納するAsyncTask
   const sequenceTask: AsyncTask<ReadonlyArray<T>> = {
+    getTaskId: () => Promise.resolve(taskId),
     // promise関数は実際の実行を担当
     get: async () => {
       // 既に実行済みの場合はキャッシュを返す
@@ -110,8 +113,10 @@ export function chord<T, R>(task: AsyncTask<ReadonlyArray<T>>, callback?: (resul
   let executionPromise: Promise<R> | null = null;
   let cachedStatus: TaskStatus | null = null;
 
+  const taskId = generateTaskId('chord-');
   // 結果を格納するAsyncTask
   const chordTask: AsyncTask<R> = {
+    getTaskId: () => Promise.resolve(taskId),
     // promise関数は実際の実行を担当
     get: () => {
       // 既に実行済みの場合はキャッシュを返す

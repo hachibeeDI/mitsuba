@@ -31,6 +31,7 @@ export type TaskId = Branded<string, '--task-id--'>;
  * タスク実行の状態管理と結果取得を行う
  */
 export interface AsyncTask<T> {
+  getTaskId(): Promise<TaskId>;
   /** タスク結果を取得 */
   get(): Promise<T>;
   status(): Promise<TaskStatus>;

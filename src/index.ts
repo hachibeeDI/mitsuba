@@ -74,6 +74,10 @@ class TaskPromiseWrapper<T> implements AsyncTask<T> {
     return checkResult();
   }
 
+  getTaskId(): Promise<TaskId> {
+    return this.publishResult;
+  }
+
   async get(): Promise<T> {
     const result = await this.taskExecutionPromise;
     return result;
