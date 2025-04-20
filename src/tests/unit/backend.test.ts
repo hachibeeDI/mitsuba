@@ -1,0 +1,156 @@
+/**
+ * バックエンドモックの単体テスト
+ */
+import {describe, test, expect, beforeEach, afterEach} from 'vitest';
+import {MockBackend} from '../mocks/backend.mock';
+import {TaskRetrievalError} from '../../errors';
+
+describe('MockBackend 単体テスト', () => {
+  let backend: MockBackend;
+
+  // 各テスト前にセットアップを実行
+  beforeEach(async () => {
+    backend = new MockBackend();
+    await backend.connect();
+  });
+
+  // 各テスト後にクリーンアップを実行
+  afterEach(async () => {
+    backend.clearResults();
+    await backend.disconnect();
+  });
+
+  // 接続状態の確認テスト
+  test('接続状態の管理', async () => {
+    // 接続済みの状態か確認
+    expect(backend.isConnected()).toBe(true);
+
+    // 切断
+    await backend.disconnect();
+    expect(backend.isConnected()).toBe(false);
+
+    // 再接続
+    await backend.connect();
+    expect(backend.isConnected()).toBe(true);
+  });
+
+  // 結果の保存と取得テスト
+  test('結果の保存と取得', async () => {
+    // テスト用のタスクIDと結果
+    const taskId = 'test-task-id';
+    const result = {value: 42, message: 'Success'};
+
+    // 結果を保存
+    await backend.storeResult(taskId, result);
+
+    // 結果が存在することを確認
+    expect(backend.hasResult(taskId)).toBe(true);
+
+    // 結果を取得して検証
+    const retrievedResult = await backend.getResult(taskId);
+    expect(retrievedResult).toEqual(result);
+  });
+
+  // 結果が存在しない場合のエラーテスト
+  test('存在しない結果の取得で例外が発生', async () => {
+    const nonExistingTaskId = 'non-existing-task';
+
+    // 存在しないタスクIDで取得を試みると例外が発生するはず
+    await expect(() => backend.getResult(nonExistingTaskId)).rejects.toBeInstanceOf(TaskRetrievalError);
+    // メッセージの一部が含まれていることを確認
+    await expect(() => backend.getResult(nonExistingTaskId)).rejects.toThrowError(/non-existing-task/);
+  });
+
+  // 結果のクリアテスト
+  test('結果のクリア', async () => {
+    // テスト用のタスクID1と結果1
+    const taskId1 = 'test-task-id-1';
+    const result1 = {value: 1};
+
+    // テスト用のタスクID2と結果2
+    const taskId2 = 'test-task-id-2';
+    const result2 = {value: 2};
+
+    // 複数の結果を保存
+    await backend.storeResult(taskId1, result1);
+    await backend.storeResult(taskId2, result2);
+
+    // 両方の結果が存在することを確認
+    expect(backend.hasResult(taskId1)).toBe(true);
+    expect(backend.hasResult(taskId2)).toBe(true);
+
+    // 結果をクリア
+    backend.clearResults();
+
+    // どちらの結果も存在しないことを確認
+    expect(backend.hasResult(taskId1)).toBe(false);
+    expect(backend.hasResult(taskId2)).toBe(false);
+  });
+
+  // 直接結果設定テスト
+  test('直接結果設定', async () => {
+    // テスト用のタスクIDと結果
+    const taskId = 'test-task-id';
+    const result = {status: 'completed'};
+
+    // setResultを使って直接結果を設定
+    backend.setResult(taskId, result);
+
+    // 結果が存在することを確認
+    expect(backend.hasResult(taskId)).toBe(true);
+
+    // 結果を取得して検証
+    const retrievedResult = await backend.getResult(taskId);
+    expect(retrievedResult).toEqual(result);
+  });
+
+  // 接続していない状態でのエラーハンドリングテスト
+  test('未接続状態でのエラーハンドリング', async () => {
+    await backend.disconnect();
+
+    // 未接続状態で結果保存するとエラーになるはず
+    await expect(() => backend.storeResult('test', {})).rejects.toThrowError('Backend is not connected');
+
+    // 未接続状態で結果取得するとエラーになるはず
+    await expect(() => backend.getResult('test')).rejects.toThrowError('Backend is not connected');
+  });
+
+  // 保存失敗のシミュレーションテスト
+  test('保存失敗のシミュレーション', async () => {
+    // 保存失敗をシミュレート
+    backend.setShouldFailStore(true);
+
+    // 結果保存するとエラーになるはず
+    await expect(() => backend.storeResult('test', {})).rejects.toThrowError('Failed to store result');
+
+    // 失敗フラグを解除
+    backend.setShouldFailStore(false);
+
+    // 正常に保存できるようになるはず
+    await backend.storeResult('test', {});
+    expect(backend.hasResult('test')).toBe(true);
+  });
+
+  // 取得失敗のシミュレーションテスト
+  test('取得失敗のシミュレーション', async () => {
+    // テスト用のタスクIDと結果
+    const taskId = 'test-task-id';
+    const result = {data: 'test'};
+
+    // 結果を保存
+    await backend.storeResult(taskId, result);
+
+    // 取得失敗をシミュレート
+    backend.setShouldFailRetrieve(true);
+
+    // 結果取得するとエラーになるはず
+    await expect(() => backend.getResult(taskId)).rejects.toBeInstanceOf(TaskRetrievalError);
+
+    // 失敗フラグを解除
+    backend.setShouldFailRetrieve(false);
+
+    // 正常に取得できるようになるはず
+    const retrievedResult = await backend.getResult(taskId);
+    expect(retrievedResult).toEqual(result);
+  });
+});
