@@ -16,6 +16,7 @@
     "noUnusedLocals": true,
     "noUnusedParameters": false,
     "noImplicitReturns": true,
+    "noImplicitAny": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
     "useUnknownInCatchVariables": true,
@@ -29,7 +30,8 @@
     "resolveJsonModule": true,
     "noErrorTruncation": true,
 
-    "lib": ["esnext", "dom"]
+    "lib": ["esnext"],
+    "types": ["node"],
   },
   "include": ["./src/**/*"]
 }
