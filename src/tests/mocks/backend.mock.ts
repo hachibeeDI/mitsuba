@@ -2,7 +2,7 @@
  * バックエンドのモック実装
  */
 import {EventEmitter} from 'node:events';
-import type {BackendInterface, TaskPayload} from '../../types';
+import type {BackendInterface} from '../../types';
 import {TaskRetrievalError} from '../../errors';
 
 interface StoredResult {

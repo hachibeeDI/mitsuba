@@ -18,7 +18,6 @@ import {WorkerPool} from './worker';
 import {getLogger} from './logger';
 
 /**
- * Promise ラッパー
  * Publisher側で使用するAsyncTask実装
  */
 class TaskPromiseWrapper<T> implements AsyncTask<T> {
@@ -58,19 +57,13 @@ class TaskPromiseWrapper<T> implements AsyncTask<T> {
  * Mitsubaメインクラス
  */
 export class Mitsuba {
-  /** ブローカーインスタンス */
   private broker: BrokerInterface;
-  /** バックエンドインスタンス */
   private backend: BackendInterface;
-  /** ワーカープール */
   private workerPool: WorkerPool | null = null;
-  /** ロガー */
   private readonly logger = getLogger();
-  /** アプリケーション名 */
   public readonly name: string;
 
   /**
-   * Mitsubaを初期化
    * @param name - アプリケーション名
    * @param options - Mitsubaオプション
    */
@@ -81,7 +74,6 @@ export class Mitsuba {
   }
 
   /**
-   * ブローカーインスタンスを作成
    * @param broker - ブローカーURLまたはブローカーインスタンス
    * @returns ブローカーインスタンス
    * @throws サポートされていないプロトコルの場合
@@ -99,7 +91,6 @@ export class Mitsuba {
   }
 
   /**
-   * バックエンドインスタンスを作成
    * @param backend - バックエンドURLまたはバックエンドインスタンス
    * @returns バックエンドインスタンス
    * @throws サポートされていないプロトコルの場合

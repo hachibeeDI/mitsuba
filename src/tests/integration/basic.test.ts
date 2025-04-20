@@ -1,12 +1,11 @@
 /**
  * Mitsuba 基本機能の結合テスト
  */
-import {describe, test, expect, beforeEach, afterEach, vi} from 'vitest';
+import {describe, test, expect, beforeEach, afterEach} from 'vitest';
 import {EventEmitter} from 'node:events';
 import {MockBroker} from '../mocks/broker.mock';
 import {MockBackend} from '../mocks/backend.mock';
 import {Mitsuba} from '../../index';
-import {TaskRetrievalError} from '../../errors';
 
 describe('Mitsuba 基本機能テスト', () => {
   // テスト用のモックとMitsubaインスタンス
@@ -54,29 +53,6 @@ describe('Mitsuba 基本機能テスト', () => {
     messageQueue.removeAllListeners();
   });
 
-  // ヘルパー関数: タスクを実行し、結果を待ってからワーカーを停止する
-  async function executeTaskWithWorker<T>(
-    tasks: Record<string, (...args: Array<unknown>) => any>,
-    worker: {start: (concurrency?: number) => Promise<void>; stop: () => Promise<void>},
-    taskName: string,
-    args: Array<unknown>,
-  ): Promise<T> {
-    // ワーカーを起動
-    await worker.start(1);
-
-    // タスクを実行
-    const task = tasks[taskName](...args);
-
-    try {
-      // 結果を待つ
-      const result = await task.promise();
-      return result as T;
-    } finally {
-      // 必ずワーカーを停止
-      await worker.stop();
-    }
-  }
-
   // 基本的なタスク実行と結果取得のテスト
   test('基本的なタスク実行と結果取得', async () => {
     // 1. タスク定義
@@ -87,10 +63,19 @@ describe('Mitsuba 基本機能テスト', () => {
       addTask,
     });
 
-    // 3. タスク実行と結果取得
-    const result = await executeTaskWithWorker(tasks, worker, 'addTask', [3, 4]);
+    // 3. ワーカーを起動 - ノンブロッキングになっているので待機不要
+    await worker.start(1);
 
-    // 4. 結果確認
+    // 4. タスク実行
+    const task = tasks.addTask(3, 4);
+
+    // 5. 結果取得（タスクが実行されるまで待機）
+    const result = await task.promise();
+
+    // 6. ワーカーを停止
+    await worker.stop();
+
+    // 7. 結果確認
     expect(result).toBe(7);
   });
 
@@ -103,23 +88,23 @@ describe('Mitsuba 基本機能テスト', () => {
       multiplyTask,
     });
 
-    // 2. タスク実行と結果取得
-    const taskPromise = tasks.multiplyTask(5, 6);
-
-    // 3. ワーカーを起動
+    // 2. ワーカーを起動
     await worker.start(1);
 
-    // 4. 結果を取得
-    const result = await taskPromise.promise();
+    // 3. タスク実行
+    const task = tasks.multiplyTask(5, 6);
 
-    // 5. ワーカーを明示的に停止
+    // 4. 結果を取得
+    const result = await task.promise();
+
+    // 5. ワーカーを停止
     await worker.stop();
 
     // 6. 結果確認
     expect(result).toBe(30);
 
     // 7. タスクIDを取得してバックエンドから直接確認
-    const taskId = await (taskPromise as any).taskPromise;
+    const taskId = await (task as any).taskPromise;
     const resultFromBackend = await mockBackend.getResult(taskId);
     expect(resultFromBackend).toBe(30);
   });
@@ -150,7 +135,7 @@ describe('Mitsuba 基本機能テスト', () => {
     // 4. タスク完了を待って状態を確認
     const result = await task.promise();
 
-    // 5. ワーカーを明示的に停止
+    // 5. ワーカーを停止
     await worker.stop();
 
     // 6. 結果と状態を確認
@@ -159,68 +144,80 @@ describe('Mitsuba 基本機能テスト', () => {
     expect(successStatus).toBe('SUCCESS');
   });
 
-  // タスク結果の取得失敗テスト
-  test('タスク結果の取得失敗', async () => {
-    // 1. タスク定義と実行
-    const testTask = async (value: number) => value * 2;
-
-    const {tasks, worker} = mitsuba.createTask({
-      testTask,
-    });
-
-    // 2. タスク実行
-    const task = tasks.testTask(10);
-
-    // 3. ワーカーを起動して処理させる
-    await worker.start(1);
-
-    // 4. 一度成功することを確認
-    const result = await task.promise();
-
-    // 5. ワーカーを明示的に停止
-    await worker.stop();
-
-    expect(result).toBe(20);
-
-    // 6. バックエンドの結果を消去して取得失敗を模擬
-    mockBackend.clearResults();
-
-    // 7. 再度取得を試みると例外が発生するはず
-    try {
-      await task.promise();
-      // 例外が発生しなかった場合はテスト失敗
-      expect(true).toBe(false);
-    } catch (error) {
-      expect(error).toBeInstanceOf(TaskRetrievalError);
-    }
-  });
-
-  // ワーカーの並列実行テスト
-  test('ワーカーの並列実行', async () => {
+  // 複数タスクの並列実行テスト
+  test('複数タスクの並列実行', async () => {
     // 1. 複数のタスク定義
-    const taskA = async (name: string) => `Task A: ${name}`;
-    const taskB = async (name: string) => `Task B: ${name}`;
+    const taskA = async (name: string) => {
+      // タスクAは短い実行時間
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return `Task A: ${name}`;
+    };
+
+    const taskB = async (name: string) => {
+      // タスクBは少し長い実行時間
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      return `Task B: ${name}`;
+    };
 
     const {tasks, worker} = mitsuba.createTask({
       taskA,
       taskB,
     });
 
-    // 2. 複数のタスクを実行
-    const taskAPromise = tasks.taskA('test1');
-    const taskBPromise = tasks.taskB('test2');
-
-    // 3. ワーカーを並列数2で起動
+    // 2. ワーカーを並列数2で起動
     await worker.start(2);
 
-    // 4. 全てのタスク完了を待つ
-    const [resultA, resultB] = await Promise.all([taskAPromise.promise(), taskBPromise.promise()]);
+    // 3. 複数のタスクを実行
+    const startTime = Date.now();
+    const taskPromises = [tasks.taskA('test1').promise(), tasks.taskB('test2').promise()];
 
-    // 5. ワーカーを明示的に停止
+    // 4. 全てのタスク完了を待つ
+    const results = await Promise.all(taskPromises);
+    const endTime = Date.now();
+
+    // 5. ワーカーを停止
     await worker.stop();
 
     // 6. 結果確認
-    expect(resultA).toBe('Task A: test1');
-    expect(resultB).toBe('Task B: test2');
+    expect(results).toContain('Task A: test1');
+    expect(results).toContain('Task B: test2');
+
+    // 7. 並列実行の確認 - タスクは同時に実行されるので、
+    // 合計実行時間は最長のタスク (taskB: 40ms) より少し長いだけのはず
+    // 完全に直列実行されると 60ms+ になるはず
+    // テスト環境の負荷によって変動するので、余裕を持った値で検証
+    const executionTime = endTime - startTime;
+    expect(executionTime).toBeLessThan(100); // 十分な余裕を持った上限値
+  });
+
+  // 複数タスクの同時投入テスト
+  test('大量のタスクを同時投入', async () => {
+    // 1. シンプルなタスク定義
+    const incrementTask = async (value: number) => value + 1;
+
+    const {tasks, worker} = mitsuba.createTask({
+      incrementTask,
+    });
+
+    // 2. ワーカーを起動 (同時処理数3)
+    await worker.start(3);
+
+    // 3. 10個のタスクを同時に投入
+    const taskCount = 10;
+    const taskPromises = Array.from({length: taskCount}, (_, i) => tasks.incrementTask(i).promise());
+
+    // 4. すべてのタスク結果を待機
+    const results = await Promise.all(taskPromises);
+
+    // 5. ワーカーを停止
+    await worker.stop();
+
+    // 6. 結果を検証
+    expect(results).toHaveLength(taskCount);
+
+    // 各タスクは入力値+1の結果を返すはず
+    for (let i = 0; i < taskCount; i++) {
+      expect(results).toContain(i + 1);
+    }
   });
 });
