@@ -150,6 +150,7 @@ export class Mitsuba {
     tasks: {[K in keyof T]: (...args: Array<unknown>) => AsyncTask<unknown>};
     worker: {
       start: (concurrency?: number) => Promise<void>;
+      stop: () => Promise<void>;
     };
   } {
     const tasks = {} as {[K in keyof T]: (...args: Array<unknown>) => AsyncTask<unknown>};
@@ -196,6 +197,13 @@ export class Mitsuba {
           this.workerPool = new WorkerPool(this.broker, this.backend, taskHandler);
         }
         return await this.workerPool.start(registeredTaskNames, concurrency);
+      },
+      stop: async (): Promise<void> => {
+        if (this.workerPool) {
+          await this.workerPool.stop();
+          this.workerPool = null;
+        }
+        return Promise.resolve();
       },
     };
 

@@ -54,6 +54,29 @@ describe('Mitsuba 基本機能テスト', () => {
     messageQueue.removeAllListeners();
   });
 
+  // ヘルパー関数: タスクを実行し、結果を待ってからワーカーを停止する
+  async function executeTaskWithWorker<T>(
+    tasks: Record<string, (...args: Array<unknown>) => any>,
+    worker: {start: (concurrency?: number) => Promise<void>; stop: () => Promise<void>},
+    taskName: string,
+    args: Array<unknown>,
+  ): Promise<T> {
+    // ワーカーを起動
+    await worker.start(1);
+
+    // タスクを実行
+    const task = tasks[taskName](...args);
+
+    try {
+      // 結果を待つ
+      const result = await task.promise();
+      return result as T;
+    } finally {
+      // 必ずワーカーを停止
+      await worker.stop();
+    }
+  }
+
   // 基本的なタスク実行と結果取得のテスト
   test('基本的なタスク実行と結果取得', async () => {
     // 1. タスク定義
@@ -64,16 +87,10 @@ describe('Mitsuba 基本機能テスト', () => {
       addTask,
     });
 
-    // 3. ワーカーを起動 (非同期で実行)
-    await worker.start(1);
+    // 3. タスク実行と結果取得
+    const result = await executeTaskWithWorker(tasks, worker, 'addTask', [3, 4]);
 
-    // 4. タスク実行
-    const task = tasks.addTask(3, 4);
-
-    // 5. 結果取得
-    const result = await task.promise();
-
-    // 6. 結果確認
+    // 4. 結果確認
     expect(result).toBe(7);
   });
 
@@ -86,20 +103,23 @@ describe('Mitsuba 基本機能テスト', () => {
       multiplyTask,
     });
 
-    // 2. ワーカーを起動
+    // 2. タスク実行と結果取得
+    const taskPromise = tasks.multiplyTask(5, 6);
+
+    // 3. ワーカーを起動
     await worker.start(1);
 
-    // 3. タスク実行
-    const task = tasks.multiplyTask(5, 6);
+    // 4. 結果を取得
+    const result = await taskPromise.promise();
 
-    // 4. 結果取得
-    const result = await task.promise();
+    // 5. ワーカーを明示的に停止
+    await worker.stop();
 
-    // 5. 結果確認
+    // 6. 結果確認
     expect(result).toBe(30);
 
-    // 6. タスクIDを取得してバックエンドから直接確認
-    const taskId = await (task as any).taskPromise;
+    // 7. タスクIDを取得してバックエンドから直接確認
+    const taskId = await (taskPromise as any).taskPromise;
     const resultFromBackend = await mockBackend.getResult(taskId);
     expect(resultFromBackend).toBe(30);
   });
@@ -129,9 +149,12 @@ describe('Mitsuba 基本機能テスト', () => {
 
     // 4. タスク完了を待って状態を確認
     const result = await task.promise();
-    const successStatus = await task.status();
 
-    // 5. 結果確認
+    // 5. ワーカーを明示的に停止
+    await worker.stop();
+
+    // 6. 結果と状態を確認
+    const successStatus = await task.status();
     expect(result).toBe(20);
     expect(successStatus).toBe('SUCCESS');
   });
@@ -145,20 +168,24 @@ describe('Mitsuba 基本機能テスト', () => {
       testTask,
     });
 
-    // 2. ワーカーを起動して処理させる
-    await worker.start(1);
-
-    // 3. タスク実行
+    // 2. タスク実行
     const task = tasks.testTask(10);
 
-    // 一度成功することを確認
+    // 3. ワーカーを起動して処理させる
+    await worker.start(1);
+
+    // 4. 一度成功することを確認
     const result = await task.promise();
+
+    // 5. ワーカーを明示的に停止
+    await worker.stop();
+
     expect(result).toBe(20);
 
-    // 4. バックエンドの結果を消去して取得失敗を模擬
+    // 6. バックエンドの結果を消去して取得失敗を模擬
     mockBackend.clearResults();
 
-    // 5. 再度取得を試みると例外が発生するはず
+    // 7. 再度取得を試みると例外が発生するはず
     try {
       await task.promise();
       // 例外が発生しなかった場合はテスト失敗
@@ -168,7 +195,7 @@ describe('Mitsuba 基本機能テスト', () => {
     }
   });
 
-  // ワーカーのスタートと実行テスト
+  // ワーカーの並列実行テスト
   test('ワーカーの並列実行', async () => {
     // 1. 複数のタスク定義
     const taskA = async (name: string) => `Task A: ${name}`;
@@ -179,17 +206,20 @@ describe('Mitsuba 基本機能テスト', () => {
       taskB,
     });
 
-    // 2. ワーカーを並列数2で起動
+    // 2. 複数のタスクを実行
+    const taskAPromise = tasks.taskA('test1');
+    const taskBPromise = tasks.taskB('test2');
+
+    // 3. ワーカーを並列数2で起動
     await worker.start(2);
 
-    // 3. 複数のタスクを同時に実行
-    const taskAPromise = tasks.taskA('test1').promise();
-    const taskBPromise = tasks.taskB('test2').promise();
-
     // 4. 全てのタスク完了を待つ
-    const [resultA, resultB] = await Promise.all([taskAPromise, taskBPromise]);
+    const [resultA, resultB] = await Promise.all([taskAPromise.promise(), taskBPromise.promise()]);
 
-    // 5. 結果確認
+    // 5. ワーカーを明示的に停止
+    await worker.stop();
+
+    // 6. 結果確認
     expect(resultA).toBe('Task A: test1');
     expect(resultB).toBe('Task B: test2');
   });
