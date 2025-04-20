@@ -28,13 +28,19 @@ export class WorkerPool {
   private activeTaskCount = 0;
   private readonly stopTimeoutMs: number;
   private readonly logger = getLogger();
+  private readonly broker: BrokerInterface;
+  private readonly backend: BackendInterface;
+  private readonly taskHandlerFn: (task: TaskPayload) => Promise<unknown>;
 
   constructor(
-    private readonly broker: BrokerInterface,
-    private readonly backend: BackendInterface,
-    private readonly taskHandlerFn: (task: TaskPayload) => Promise<unknown>,
+    broker: BrokerInterface,
+    backend: BackendInterface,
+    taskHandlerFn: (task: TaskPayload) => Promise<unknown>,
     options: WorkerPoolOptions = {},
   ) {
+    this.broker = broker;
+    this.backend = backend;
+    this.taskHandlerFn = taskHandlerFn;
     this.stopTimeoutMs = options.gracefulShutdownTimeout ?? 30000;
   }
 

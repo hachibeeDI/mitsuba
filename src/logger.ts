@@ -7,13 +7,15 @@ import type {Logger} from './types';
 /**
  * ログレベル
  */
-export enum LogLevel {
-  DEBUG = 0,
-  INFO = 1,
-  WARN = 2,
-  ERROR = 3,
-  SILENT = 4,
-}
+export const LogLevel = {
+  DEBUG: 0,
+  INFO: 1,
+  WARN: 2,
+  ERROR: 3,
+  SILENT: 4,
+} as const;
+
+export type LogLevel = typeof LogLevel[keyof typeof LogLevel];
 
 /**
  * ロガーの設定オプション

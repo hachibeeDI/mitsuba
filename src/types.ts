@@ -73,13 +73,15 @@ export interface BackendInterface {
 }
 
 /** ワーカープールの状態 */
-export enum WorkerPoolState {
-  IDLE = 'IDLE',
-  RUNNING = 'RUNNING',
-  STOPPING = 'STOPPING',
-  STOPPED = 'STOPPED',
-  ERROR = 'ERROR',
-}
+export const WorkerPoolState = {
+  IDLE: 'IDLE',
+  RUNNING: 'RUNNING',
+  STOPPING: 'STOPPING',
+  STOPPED: 'STOPPED',
+  ERROR: 'ERROR',
+} as const;
+
+export type WorkerPoolState = typeof WorkerPoolState[keyof typeof WorkerPoolState];
 
 /** タスクペイロードインターフェース */
 export interface TaskPayload {

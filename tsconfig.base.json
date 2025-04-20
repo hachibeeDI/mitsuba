@@ -6,6 +6,7 @@
     "skipLibCheck": true,
     "incremental": true,
     "tsBuildInfoFile": ".tsbuildinfo",
+    "erasableSyntaxOnly": true,
 
     "declaration": true,
     "declarationMap": true,

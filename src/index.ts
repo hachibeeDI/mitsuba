@@ -28,6 +28,8 @@ export class Mitsuba {
   private workerPool: WorkerPool | null = null;
   /** ロガー */
   private readonly logger = getLogger();
+  /** アプリケーション名 */
+  public readonly name: string;
 
   /**
    * Mitsubaを初期化
@@ -35,9 +37,10 @@ export class Mitsuba {
    * @param options - Mitsubaオプション
    */
   constructor(
-    public readonly name: string,
-    private readonly options: MitsubaOptions,
+    name: string,
+    options: MitsubaOptions,
   ) {
+    this.name = name;
     this.broker = this.createBroker(options.broker);
     this.backend = this.createBackend(options.backend);
   }
@@ -146,12 +149,14 @@ export class Mitsuba {
  */
 class TaskPromiseWrapper<T> implements AsyncTask<T> {
   private readonly taskPromise: Promise<string>;
+  private readonly backend: BackendInterface;
 
   constructor(
     taskIdPromise: Promise<string>,
-    private readonly backend: BackendInterface,
+    backend: BackendInterface,
   ) {
     this.taskPromise = taskIdPromise;
+    this.backend = backend;
   }
 
   get id(): string {
@@ -190,4 +195,3 @@ export function mitsuba(name: string, options: MitsubaOptions): Mitsuba {
 
 // 必要なタイプのエクスポート
 export type {MitsubaOptions, AsyncTask, TaskOptions, TaskStatus} from './types';
-export {TaskRetryError} from './errors';
