@@ -34,7 +34,7 @@ export interface AsyncTask<T> {
   getTaskId(): Promise<TaskId>;
   /** タスク結果を取得 */
   get(): Promise<T>;
-  status(): Promise<TaskStatus>;
+  status: TaskStatus;
   /** エラー時の再試行 */
   retry(options?: ErrorOptions): never;
 }

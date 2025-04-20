@@ -84,7 +84,7 @@ export class MockBackend implements Backend {
     this.messageQueue.emit('taskResult', {taskId, result});
   }
 
-  async getResult<T>(taskId: TaskId): Promise<T> {
+  async getResult<T>(taskId: TaskId, timeout = 5000): Promise<T> {
     // Wait a tick to simulate async behavior
     await Promise.resolve();
 
@@ -96,18 +96,64 @@ export class MockBackend implements Backend {
       throw new TaskRetrievalError(taskId);
     }
 
-    const storedResult = this.results.get(taskId);
-    if (!storedResult) {
-      throw new TaskRetrievalError(taskId);
+    // Check if result is already available
+    const checkResult = (): StoredResult | undefined => {
+      const storedResult = this.results.get(taskId);
+
+      // TTLが設定されていて期限切れの場合はnullを返す
+      if (storedResult?.expireAt && storedResult.expireAt < Date.now()) {
+        this.results.delete(taskId);
+        return undefined;
+      }
+
+      return storedResult;
+    };
+
+    // Initial check
+    const initialResult = checkResult();
+    if (initialResult) {
+      return initialResult.result as T;
     }
 
-    // TTLが設定されていて期限切れの場合はnullを返す
-    if (storedResult.expireAt && storedResult.expireAt < Date.now()) {
-      this.results.delete(taskId);
-      throw new TaskRetrievalError(taskId);
-    }
+    // Wait for result if not immediately available
+    return new Promise<T>((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        cleanup();
+        reject(new TaskRetrievalError(taskId));
+      }, timeout);
 
-    return storedResult.result as T;
+      const handleTaskResult = (data: {taskId: TaskId; result: unknown}) => {
+        if (data.taskId === taskId) {
+          const result = checkResult();
+          if (result) {
+            cleanup();
+            resolve(result.result as T);
+          }
+        }
+      };
+
+      const handleTaskExecuted = (data: {taskId: TaskId; status: string; result?: unknown}) => {
+        if (data.taskId === taskId && data.status === 'SUCCESS') {
+          const result = checkResult();
+          if (result) {
+            cleanup();
+            resolve(result.result as T);
+          }
+        }
+      };
+
+      const cleanup = () => {
+        if (this.results.has(taskId)) {
+          this.results.delete(taskId);
+        }
+        clearTimeout(timeoutId);
+        this.messageQueue.removeListener('taskResult', handleTaskResult);
+        this.messageQueue.removeListener('taskExecuted', handleTaskExecuted);
+      };
+
+      this.messageQueue.on('taskResult', handleTaskResult);
+      this.messageQueue.on('taskExecuted', handleTaskExecuted);
+    });
   }
 
   // モックテスト用のヘルパーメソッド

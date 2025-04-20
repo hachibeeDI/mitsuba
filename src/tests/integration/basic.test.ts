@@ -123,35 +123,25 @@ describe('Mitsuba 基本機能テスト', () => {
 
   // タスクのステータス確認テスト
   test('タスクのステータス確認', async () => {
-    // 1. タスク定義
-    const slowTask = async (value: number) => {
-      // 少し待機するタスク
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      return value * 2;
-    };
-
     const {tasks, worker} = mitsuba.createTask({
-      slowTask,
+      slowTask: async (value: number) => {
+        // 少し待機するタスク
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return value * 2;
+      },
     });
 
-    // 2. タスク実行 (ワーカーを起動する前)
+    await worker.start(1);
     const task = tasks.slowTask(10);
 
-    // ステータスを確認（結果が保存される前）
-    const pendingStatus = await task.status();
+    const pendingStatus = task.status;
     expect(pendingStatus).toBe('PENDING');
 
-    // 3. ワーカーを起動して処理させる
-    await worker.start(1);
-
-    // 4. タスク完了を待って状態を確認
     const result = await task.get();
 
-    // 5. ワーカーを停止
     await worker.stop();
 
-    // 6. 結果と状態を確認
-    const successStatus = await task.status();
+    const successStatus = task.status;
     expect(result).toBe(20);
     expect(successStatus).toBe('SUCCESS');
   });
