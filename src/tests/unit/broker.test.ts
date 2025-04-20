@@ -3,7 +3,7 @@
  */
 import {describe, test, expect, beforeEach, afterEach} from 'vitest';
 import {MockBroker} from '../mocks/broker.mock';
-import type {TaskOptions} from '../../types';
+import type {TaskOptions, TaskPayload, TaskHandlerResult} from '../../types';
 
 describe('MockBroker 単体テスト', () => {
   let broker: MockBroker;
@@ -60,10 +60,14 @@ describe('MockBroker 単体テスト', () => {
   test('タスクの消費と実行', async () => {
     // 消費ハンドラのモック
     const handlerResults: Array<unknown> = [];
-    const taskHandler = async (task: unknown): Promise<unknown> => {
+    const taskHandler = async (task: TaskPayload): Promise<TaskHandlerResult> => {
       await Promise.resolve();
       handlerResults.push(task);
-      return 'processed';
+      return {
+        status: 'processed',
+        taskId: task.id,
+        result: 'processed',
+      };
     };
 
     // コンシューマー登録
@@ -89,10 +93,14 @@ describe('MockBroker 単体テスト', () => {
   test('コンシューマーのキャンセル', async () => {
     // 消費ハンドラのモック
     const handlerResults: Array<unknown> = [];
-    const taskHandler = async (task: unknown): Promise<unknown> => {
+    const taskHandler = async (task: TaskPayload): Promise<TaskHandlerResult> => {
       await Promise.resolve();
       handlerResults.push(task);
-      return 'processed';
+      return {
+        status: 'processed',
+        taskId: task.id,
+        result: 'processed',
+      };
     };
 
     // コンシューマー登録
@@ -121,10 +129,14 @@ describe('MockBroker 単体テスト', () => {
 
     // 未接続状態でコンシューマー登録するとエラーになるはず
     await expect(() =>
-      broker.consumeTask('test', async (t) => {
+      broker.consumeTask('test', async (t: TaskPayload): Promise<TaskHandlerResult> => {
         await Promise.resolve();
         // テストのためのダミーハンドラ（実際には呼ばれない）
-        return t;
+        return {
+          status: 'processed',
+          taskId: t.id,
+          result: t,
+        };
       }),
     ).rejects.toThrowError('Broker is not connected');
 

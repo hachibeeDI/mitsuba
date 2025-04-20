@@ -3,10 +3,11 @@
  */
 import {v4 as uuidv4} from 'uuid';
 import {EventEmitter} from 'node:events';
-import type {Broker, TaskPayload, TaskOptions, TaskId} from '../../types';
+import type {Broker, TaskPayload, TaskOptions, TaskId, TaskHandlerResult} from '../../types';
 import {generateTaskId} from '../../utils';
 
-type TaskHandler = (task: unknown) => Promise<unknown>;
+// 型安全なハンドラー定義
+type TaskHandler = (task: TaskPayload) => Promise<TaskHandlerResult>;
 
 export class MockBroker implements Broker {
   private tasks = new Map<TaskId, TaskPayload>();
@@ -81,15 +82,31 @@ export class MockBroker implements Broker {
       if (payload.taskName === queueName) {
         try {
           // タスク実行
-          const result = await handler(payload);
+          const handlerResult = await handler(payload);
 
-          // 処理成功イベントを発行
-          this.messageQueue.emit('taskExecuted', {
-            taskId: payload.id,
-            taskName: payload.taskName,
-            status: 'SUCCESS',
-            result,
-          });
+          // ハンドラー結果に基づいて適切なイベントを発行
+          if (handlerResult.status === 'processed') {
+            // 処理成功イベント - 結果ありの場合
+            this.messageQueue.emit('taskExecuted', {
+              taskId: handlerResult.taskId,
+              taskName: payload.taskName,
+              status: 'SUCCESS',
+              result: handlerResult.result,
+            });
+          } else if (handlerResult.status === 'accepted') {
+            // タスク受付イベント - キューイングのみ
+            this.messageQueue.emit('taskAccepted', {
+              taskId: handlerResult.taskId,
+              taskName: payload.taskName,
+            });
+          } else if (handlerResult.status === 'rejected') {
+            // タスク拒否イベント
+            this.messageQueue.emit('taskRejected', {
+              taskId: handlerResult.taskId,
+              taskName: payload.taskName,
+              reason: handlerResult.reason,
+            });
+          }
         } catch (error) {
           // 処理失敗イベントを発行
           this.messageQueue.emit('taskExecuted', {

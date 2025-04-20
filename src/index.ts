@@ -25,22 +25,67 @@ import {getLogger} from './logger';
 class TaskPromiseWrapper<T> implements AsyncTask<T> {
   private readonly publishResult: Promise<TaskId>;
   private readonly backend: Backend;
+  private readonly taskExecutionPromise: Promise<T>;
 
   constructor(publishResult: Promise<TaskId>, backend: Backend) {
     this.publishResult = publishResult;
     this.backend = backend;
+
+    // タスク実行結果を取得する非同期処理
+    this.taskExecutionPromise = new Promise((resolve, reject) => {
+      // タスクID取得とポーリング処理を非同期で開始
+      void this.pollForResult().then(resolve).catch(reject);
+    });
+  }
+
+  /**
+   * 結果が利用可能になるまでポーリングする
+   * @private
+   */
+  private async pollForResult(): Promise<T> {
+    // タスクIDを取得
+    const taskId = await this.publishResult;
+
+    // ポーリングを使用してバックエンドから結果を取得
+    // 結果が処理されるまで一定間隔で再試行
+    let attempts = 0;
+    const maxAttempts = 100; // 最大再試行回数
+    const pollingInterval = 50; // ポーリング間隔（ミリ秒）
+
+    const checkResult = async (): Promise<T> => {
+      try {
+        // バックエンドから結果を取得
+        return await this.backend.getResult<T>(taskId);
+      } catch (error) {
+        // まだ結果が保存されていない場合
+        if (attempts < maxAttempts) {
+          // 少し待ってから再試行
+          await new Promise((res) => setTimeout(res, pollingInterval));
+          attempts++;
+          return checkResult();
+        }
+
+        // 最大再試行回数を超えた場合はエラー
+        throw error;
+      }
+    };
+
+    // 結果を取得するためのポーリングを開始
+    return checkResult();
   }
 
   async get(): Promise<T> {
-    return this.backend.getResult<T>(await this.publishResult);
+    const result = await this.taskExecutionPromise;
+    return result;
   }
 
   async status(): Promise<TaskStatus> {
-    const taskId = await this.publishResult;
     try {
-      await this.backend.getResult<T>(taskId);
+      // 結果が取得できればタスクは成功
+      await this.taskExecutionPromise;
       return 'SUCCESS';
     } catch {
+      // エラーが発生した場合はタスクはまだ処理中または失敗
       return 'PENDING';
     }
   }

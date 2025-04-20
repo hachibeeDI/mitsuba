@@ -121,17 +121,17 @@ export class WorkerPool {
 
     try {
       const consumerTag = await this.broker.consumeTask(taskName, (payload) => {
-        if (!this.isValidTaskPayload(payload)) {
-          this.logger.error(`Invalid task payload received for ${taskName}`, payload);
-          return Promise.resolve({status: 'rejected', reason: 'Invalid payload'});
-        }
-
+        // キューにタスクを追加
         this.taskQueue.push({
           taskName,
-          payload: payload as TaskPayload,
+          payload,
         });
 
-        return Promise.resolve({status: 'queued', taskId: (payload as TaskPayload).id});
+        // タスクを受け付けた状態を返す
+        return Promise.resolve({
+          status: 'accepted',
+          taskId: payload.id,
+        });
       });
 
       this.consumerTags.set(workerId, consumerTag);
@@ -219,9 +219,33 @@ export class WorkerPool {
       // 結果をバックエンドに保存
       await this.backend.storeResult(taskId, result, payload.options?.resultExpires);
 
+      // taskExecutedイベントを発行して処理完了を通知
+      // 他のシステムが処理結果を監視できるようにする
+      const broker = this.broker as any;
+      if (broker.getMessageQueue) {
+        broker.getMessageQueue().emit('taskExecuted', {
+          taskId,
+          taskName,
+          status: 'SUCCESS',
+          result,
+        });
+      }
+
       this.logger.debug(`Task ${taskId} completed successfully`);
     } catch (error) {
       this.logger.error(`Task ${taskId} failed:`, error);
+
+      // エラー通知をemitして他のシステムにも通知
+      const broker = this.broker as any;
+      if (broker.getMessageQueue) {
+        broker.getMessageQueue().emit('taskExecuted', {
+          taskId,
+          taskName,
+          status: 'FAILURE',
+          error,
+        });
+      }
+
       throw error;
     } finally {
       // タスク完了
@@ -359,34 +383,5 @@ export class WorkerPool {
     this.activeTaskCount = 0;
     this.taskQueue = [];
     this.processingTasks.clear();
-  }
-
-  /**
-   * ペイロードが有効なTaskPayloadか検証する型ガード
-   */
-  private isValidTaskPayload(payload: unknown): payload is TaskPayload {
-    if (!payload || typeof payload !== 'object') {
-      return false;
-    }
-
-    const p = payload as Record<string, unknown>;
-
-    if (typeof p.id !== 'string' || !p.id) {
-      return false;
-    }
-
-    if (typeof p.taskName !== 'string' || !p.taskName) {
-      return false;
-    }
-
-    if (!Array.isArray(p.args)) {
-      return false;
-    }
-
-    if (p.options !== undefined && (typeof p.options !== 'object' || p.options === null)) {
-      return false;
-    }
-
-    return true;
   }
 }

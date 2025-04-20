@@ -63,6 +63,15 @@ export type CreatedTask<T extends TaskRegistry<never, never>> = {
 };
 
 /**
+ * タスク処理の結果を表す型
+ * タスクの処理状態を明示的に表現
+ */
+export type TaskHandlerResult =
+  | {status: 'accepted'; taskId: TaskId} // タスクがキューに受け入れられた
+  | {status: 'processed'; taskId: TaskId; result: unknown} // タスクが処理され結果が得られた
+  | {status: 'rejected'; taskId: TaskId; reason: string}; // タスクが拒否された
+
+/**
  * メッセージブローカーインターフェース
  * タスクの発行と消費を管理
  */
@@ -70,7 +79,7 @@ export type Broker = {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   publishTask(taskName: string, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId>;
-  consumeTask(queueName: string, handler: (task: unknown) => Promise<unknown>): Promise<string>;
+  consumeTask(queueName: string, handler: (task: TaskPayload) => Promise<TaskHandlerResult>): Promise<string>;
   cancelConsumer(consumerTag: string): Promise<void>;
 };
 
