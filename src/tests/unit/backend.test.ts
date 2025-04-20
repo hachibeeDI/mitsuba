@@ -57,9 +57,9 @@ describe('MockBackend 単体テスト', () => {
     const nonExistingTaskId = 'non-existing-task' as TaskId;
 
     // 存在しないタスクIDで取得を試みると例外が発生するはず
-    await expect(() => backend.getResult(nonExistingTaskId)).rejects.toBeInstanceOf(TaskRetrievalError);
+    await expect(() => backend.getResult(nonExistingTaskId, 1)).rejects.toBeInstanceOf(TaskRetrievalError);
     // メッセージの一部が含まれていることを確認
-    await expect(() => backend.getResult(nonExistingTaskId)).rejects.toThrowError(/non-existing-task/);
+    await expect(() => backend.getResult(nonExistingTaskId, 1)).rejects.toThrowError(/non-existing-task/);
   });
 
   // 結果のクリアテスト
