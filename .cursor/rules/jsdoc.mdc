@@ -6,4 +6,6 @@ alwaysApply: false
 
 # Comment rule
 
-Use JSDoc style.
+- JSDocで書け
+- 変数や使っている関数の名前から簡単に推測できる内容にコメントは不要
+- WhatではなくWhyを書け
