@@ -148,36 +148,34 @@ describe('Mitsuba 基本機能テスト', () => {
 
   // 複数タスクの並列実行テスト
   test('複数タスクの並列実行', async () => {
+    // FIXME: it depends on the test environment, but looks like too long
+    const DEFAULT_DELAY = 50 + 10;
+
+    const TASK_A_TIME = 90;
+    const TASK_B_TIME = 100;
+
     // 1. 複数のタスク定義
-    const taskA = async (name: string) => {
-      // タスクAは短い実行時間
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      return `Task A: ${name}`;
-    };
-
-    const taskB = async (name: string) => {
-      // タスクBは少し長い実行時間
-      await new Promise((resolve) => setTimeout(resolve, 40));
-      return `Task B: ${name}`;
-    };
-
     const {tasks, worker} = mitsuba.createTask({
-      taskA,
-      taskB,
+      taskA: async (name: string) => {
+        // タスクAは短い実行時間
+        await new Promise((resolve) => setTimeout(resolve, TASK_A_TIME));
+        return `Task A: ${name}`;
+      },
+      taskB: async (name: string) => {
+        // タスクBは少し長い実行時間
+        await new Promise((resolve) => setTimeout(resolve, TASK_B_TIME));
+        return `Task B: ${name}`;
+      },
     });
 
     // 2. ワーカーを並列数2で起動
     await worker.start(2);
 
     // 3. 複数のタスクを実行
-    const startTime = Date.now();
-    const taskPromises = [tasks.taskA('test1').get(), tasks.taskB('test2').get()];
+    const startTime = performance.now();
+    const results = await Promise.all([tasks.taskA('test1').get(), tasks.taskB('test2').get()]);
+    const endTime = performance.now();
 
-    // 4. 全てのタスク完了を待つ
-    const results = await Promise.all(taskPromises);
-    const endTime = Date.now();
-
-    // 5. ワーカーを停止
     await worker.stop();
 
     // 6. 結果確認
@@ -189,16 +187,14 @@ describe('Mitsuba 基本機能テスト', () => {
     // 完全に直列実行されると 60ms+ になるはず
     // テスト環境の負荷によって変動するので、余裕を持った値で検証
     const executionTime = endTime - startTime;
-    expect(executionTime).toBeLessThan(100); // 十分な余裕を持った上限値
+    expect(executionTime).toBeLessThan(TASK_B_TIME + DEFAULT_DELAY); // 十分な余裕を持った上限値
   });
 
   // 複数タスクの同時投入テスト
   test('大量のタスクを同時投入', async () => {
     // 1. シンプルなタスク定義
-    const incrementTask = async (value: number) => value + 1;
-
     const {tasks, worker} = mitsuba.createTask({
-      incrementTask,
+      incrementTask: async (value: number) => value + 1,
     });
 
     // 2. ワーカーを起動 (同時処理数3)
