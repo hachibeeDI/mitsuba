@@ -144,12 +144,10 @@ export class AMQPBroker implements BrokerInterface {
     await this.ensureConnection();
 
     const taskId = uuidv4();
-    const payload: TaskPayload = {
-      id: taskId,
-      taskName,
-      args,
-      options: options ? {...options} : undefined,
-    };
+
+    // Create a task payload with properly typed options
+    // When options is undefined, we don't include it in the payload at all
+    const payload: TaskPayload = options ? {id: taskId, taskName, args, options} : {id: taskId, taskName, args};
 
     if (!this.channel) {
       throw new BrokerConnectionError('Channel is not connected');
