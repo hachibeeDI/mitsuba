@@ -4,6 +4,7 @@
 import {describe, test, expect, beforeEach, afterEach} from 'vitest';
 import {MockBackend} from '../mocks/backend.mock';
 import {TaskRetrievalError} from '../../errors';
+import type {TaskId} from '../../types';
 
 describe('MockBackend 単体テスト', () => {
   let backend: MockBackend;
@@ -37,7 +38,7 @@ describe('MockBackend 単体テスト', () => {
   // 結果の保存と取得テスト
   test('結果の保存と取得', async () => {
     // テスト用のタスクIDと結果
-    const taskId = 'test-task-id';
+    const taskId = 'test-task-id' as TaskId;
     const result = {value: 42, message: 'Success'};
 
     // 結果を保存
@@ -53,7 +54,7 @@ describe('MockBackend 単体テスト', () => {
 
   // 結果が存在しない場合のエラーテスト
   test('存在しない結果の取得で例外が発生', async () => {
-    const nonExistingTaskId = 'non-existing-task';
+    const nonExistingTaskId = 'non-existing-task' as TaskId;
 
     // 存在しないタスクIDで取得を試みると例外が発生するはず
     await expect(() => backend.getResult(nonExistingTaskId)).rejects.toBeInstanceOf(TaskRetrievalError);
@@ -64,11 +65,11 @@ describe('MockBackend 単体テスト', () => {
   // 結果のクリアテスト
   test('結果のクリア', async () => {
     // テスト用のタスクID1と結果1
-    const taskId1 = 'test-task-id-1';
+    const taskId1 = 'test-task-id-1' as TaskId;
     const result1 = {value: 1};
 
     // テスト用のタスクID2と結果2
-    const taskId2 = 'test-task-id-2';
+    const taskId2 = 'test-task-id-2' as TaskId;
     const result2 = {value: 2};
 
     // 複数の結果を保存
@@ -90,7 +91,7 @@ describe('MockBackend 単体テスト', () => {
   // 直接結果設定テスト
   test('直接結果設定', async () => {
     // テスト用のタスクIDと結果
-    const taskId = 'test-task-id';
+    const taskId = 'Test-task-id' as TaskId;
     const result = {status: 'completed'};
 
     // setResultを使って直接結果を設定
@@ -109,10 +110,10 @@ describe('MockBackend 単体テスト', () => {
     await backend.disconnect();
 
     // 未接続状態で結果保存するとエラーになるはず
-    await expect(() => backend.storeResult('test', {})).rejects.toThrowError('Backend is not connected');
+    await expect(() => backend.storeResult('test' as TaskId, {})).rejects.toThrowError('Backend is not connected');
 
     // 未接続状態で結果取得するとエラーになるはず
-    await expect(() => backend.getResult('test')).rejects.toThrowError('Backend is not connected');
+    await expect(() => backend.getResult('test' as TaskId)).rejects.toThrowError('Backend is not connected');
   });
 
   // 保存失敗のシミュレーションテスト
@@ -121,20 +122,20 @@ describe('MockBackend 単体テスト', () => {
     backend.setShouldFailStore(true);
 
     // 結果保存するとエラーになるはず
-    await expect(() => backend.storeResult('test', {})).rejects.toThrowError('Failed to store result');
+    await expect(() => backend.storeResult('test' as TaskId, {})).rejects.toThrowError('Failed to store result');
 
     // 失敗フラグを解除
     backend.setShouldFailStore(false);
 
     // 正常に保存できるようになるはず
-    await backend.storeResult('test', {});
-    expect(backend.hasResult('test')).toBe(true);
+    await backend.storeResult('test' as TaskId, {});
+    expect(backend.hasResult('test' as TaskId)).toBe(true);
   });
 
   // 取得失敗のシミュレーションテスト
   test('取得失敗のシミュレーション', async () => {
     // テスト用のタスクIDと結果
-    const taskId = 'test-task-id';
+    const taskId = 'test-task-id' as TaskId;
     const result = {data: 'test'};
 
     // 結果を保存

@@ -11,8 +11,8 @@ import type {
   TaskOptions,
   TaskStatus,
   TaskPayload,
-  TaskFunc,
   CreatedTask,
+  TaskId,
 } from './types';
 import {AMQPBroker} from './brokers/amqp';
 import {AMQPBackend} from './backends/amqp';
@@ -23,20 +23,20 @@ import {getLogger} from './logger';
  * Publisher側で使用するAsyncTask実装
  */
 class TaskPromiseWrapper<T> implements AsyncTask<T> {
-  readonly id: string;
+  private readonly publishResult: Promise<TaskId>;
   private readonly backend: BackendInterface;
 
-  constructor(id: string, backend: BackendInterface) {
-    this.id = id;
+  constructor(publishResult: Promise<TaskId>, backend: BackendInterface) {
+    this.publishResult = publishResult;
     this.backend = backend;
   }
 
-  promise(): Promise<T> {
-    return this.backend.getResult<T>(this.id);
+  async get(): Promise<T> {
+    return this.backend.getResult<T>(await this.publishResult);
   }
 
   async status(): Promise<TaskStatus> {
-    const taskId = await this.id;
+    const taskId = await this.publishResult;
     try {
       await this.backend.getResult<T>(taskId);
       return 'SUCCESS';
@@ -148,16 +148,14 @@ export class Mitsuba {
       registeredTaskNames.push(taskName);
       if (typeof task === 'function') {
         // can't be typesafe
-        (tasks as any)[taskName] = async (...args: ReadonlyArray<unknown>) => {
-          const taskId = await this.broker.publishTask(taskName, args, undefined);
-          return new TaskPromiseWrapper(taskId, this.backend);
+        (tasks as any)[taskName] = (...args: ReadonlyArray<unknown>) => {
+          return new TaskPromiseWrapper(this.broker.publishTask(taskName, args, undefined), this.backend);
         };
       } else {
         const taskObj = task as {opts?: TaskOptions; call: (...args: ReadonlyArray<unknown>) => unknown};
         // can't be typesafe
-        (tasks as any)[taskName as keyof T] = async (...args: ReadonlyArray<unknown>) => {
-          const taskId = await this.broker.publishTask(taskName, args, taskObj.opts);
-          return new TaskPromiseWrapper(taskId, this.backend);
+        (tasks as any)[taskName as keyof T] = (...args: ReadonlyArray<unknown>) => {
+          return new TaskPromiseWrapper(this.broker.publishTask(taskName, args, taskObj.opts), this.backend);
         };
       }
     }
@@ -178,7 +176,7 @@ export class Mitsuba {
     };
 
     return {
-      tasks: tasks as any,
+      tasks,
       worker: {
         start: async (concurrency = 1): Promise<void> => {
           // 既存のworkerPoolを使用するか、新しく作成する

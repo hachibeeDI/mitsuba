@@ -1,8 +1,12 @@
 /**
  * Mitsuba 基本機能の結合テスト
  */
-import {describe, test, expect, beforeEach, afterEach} from 'vitest';
+
 import {EventEmitter} from 'node:events';
+
+import {describe, test, expect, beforeEach, afterEach} from 'vitest';
+import {expectTypeOf} from 'vitest';
+
 import {MockBroker} from '../mocks/broker.mock';
 import {MockBackend} from '../mocks/backend.mock';
 import {Mitsuba} from '../../index';
@@ -53,8 +57,7 @@ describe('Mitsuba 基本機能テスト', () => {
     messageQueue.removeAllListeners();
   });
 
-  // 基本的なタスク実行と結果取得のテスト
-  test('基本的なタスク実行と結果取得', async () => {
+  test('テスト作成の型テスト', async () => {
     const {tasks, worker} = mitsuba.createTask({
       addTask: (a: number, b: number) => a + b,
       addTask2: (a: number, b: string) => a + b,
@@ -62,6 +65,23 @@ describe('Mitsuba 基本機能テスト', () => {
         opts: {priority: 10},
         call: (a: number) => a.toString(),
       },
+    } as const);
+
+    await worker.start(1);
+
+    console.debug(tasks.addTask(3, 4));
+
+    expectTypeOf(await (await tasks.addTask(3, 4)).get()).toEqualTypeOf<number>();
+    expectTypeOf(await tasks.addTask2(3, '4').promise()).toEqualTypeOf<string>();
+    expectTypeOf(await tasks.asString(100).promise()).toEqualTypeOf<string>();
+
+    await worker.stop();
+  });
+
+  // 基本的なタスク実行と結果取得のテスト
+  test('基本的なタスク実行と結果取得', async () => {
+    const {tasks, worker} = mitsuba.createTask({
+      addTask: (a: number, b: number) => a + b,
     } as const);
 
     await worker.start(1);

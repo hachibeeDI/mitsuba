@@ -3,6 +3,8 @@
  * 分散タスク処理システムの基本的な型を定義
  */
 
+export type Branded<T, Brand> = T & {readonly __brand: Brand};
+
 /** タスクの実行オプション */
 export type TaskOptions = {
   /** 高いほど優先して実行 */
@@ -22,14 +24,15 @@ export type TaskOptions = {
 /** タスクの状態 */
 export type TaskStatus = 'PENDING' | 'STARTED' | 'SUCCESS' | 'FAILURE' | 'RETRY';
 
+export type TaskId = Branded<string, '--task-id--'>;
+
 /**
  * 非同期タスクインターフェース
  * タスク実行の状態管理と結果取得を行う
  */
 export interface AsyncTask<T> {
-  id: string;
   /** タスク結果を取得 */
-  promise(): Promise<T>;
+  get(): Promise<T>;
   status(): Promise<TaskStatus>;
   /** エラー時の再試行 */
   retry(options?: ErrorOptions): never;
@@ -49,7 +52,7 @@ export type TaskRegistry<
   Fns extends (...args: ReadonlyArray<any>) => any | TaskFunc<ReadonlyArray<any>, any>,
 > = Record<Keys, Fns>;
 
-type TaskPublisher<Args extends ReadonlyArray<unknown>, R> = (...args: Args) => AsyncTask<R>;
+type TaskPublisher<Args extends ReadonlyArray<unknown>, R> = (...args: Args) => Promise<AsyncTask<R>>;
 
 export type CreatedTask<T extends TaskRegistry<never, never>> = {
   [K in keyof T]: T[K] extends (...args: infer Args) => infer R
@@ -66,7 +69,7 @@ export type CreatedTask<T extends TaskRegistry<never, never>> = {
 export interface BrokerInterface {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
-  publishTask(taskName: string, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<string>;
+  publishTask(taskName: string, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId>;
   consumeTask(queueName: string, handler: (task: unknown) => Promise<unknown>): Promise<string>;
   cancelConsumer(consumerTag: string): Promise<void>;
 }
@@ -78,8 +81,8 @@ export interface BrokerInterface {
 export interface BackendInterface {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
-  storeResult(taskId: string, result: unknown, expiresIn?: number): Promise<void>;
-  getResult<T>(taskId: string): Promise<T>;
+  storeResult(taskId: TaskId, result: unknown, expiresIn?: number): Promise<void>;
+  getResult<T>(taskId: TaskId): Promise<T>;
 }
 
 /** ワーカープールの状態 */
@@ -95,7 +98,7 @@ export type WorkerPoolState = (typeof WorkerPoolState)[keyof typeof WorkerPoolSt
 
 /** タスク実行情報 */
 export interface TaskPayload {
-  id: string;
+  id: TaskId;
   taskName: string;
   args: ReadonlyArray<unknown>;
   options?: TaskOptions | undefined;

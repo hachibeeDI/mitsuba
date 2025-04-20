@@ -4,7 +4,7 @@
 import type {Channel, ChannelModel} from 'amqplib';
 import {connect} from 'amqplib';
 
-import type {BackendInterface} from '../types';
+import type {BackendInterface, TaskId} from '../types';
 import {BackendConnectionError, TaskRetrievalError, TaskTimeoutError} from '../errors';
 import {getLogger} from '../logger';
 
@@ -113,7 +113,7 @@ export class AMQPBackend implements BackendInterface {
    * @param expiresIn - 結果の有効期限（秒）
    * @throws バックエンドに接続していない場合
    */
-  async storeResult(taskId: string, result: unknown, expiresIn = 3600): Promise<void> {
+  async storeResult(taskId: TaskId, result: unknown, expiresIn = 3600): Promise<void> {
     await this.ensureConnection();
 
     if (!this.channel) {
@@ -142,7 +142,7 @@ export class AMQPBackend implements BackendInterface {
    * @returns タスク結果
    * @throws バックエンドに接続していない場合またはタイムアウト
    */
-  async getResult<T>(taskId: string, timeoutMs = 30000): Promise<T> {
+  async getResult<T>(taskId: TaskId, timeoutMs = 30000): Promise<T> {
     await this.ensureConnection();
 
     if (!this.channel) {

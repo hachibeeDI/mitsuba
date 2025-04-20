@@ -4,10 +4,10 @@
 import type {Channel, ChannelModel, Options, Replies} from 'amqplib';
 import {connect} from 'amqplib';
 
-import {v4 as uuidv4} from 'uuid';
-import type {BrokerInterface, TaskOptions, TaskPayload} from '../types';
+import type {BrokerInterface, TaskId, TaskOptions, TaskPayload} from '../types';
 import {BrokerConnectionError, BrokerError} from '../errors';
 import {getLogger} from '../logger';
+import {generateTaskId} from '../utils';
 
 export type AMQPBrokerOptions = {
   /** AMQPサーバーURI */
@@ -140,10 +140,10 @@ export class AMQPBroker implements BrokerInterface {
    * @returns タスクID
    * @throws ブローカーに接続していない場合
    */
-  async publishTask(taskName: string, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<string> {
+  async publishTask(taskName: string, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId> {
     await this.ensureConnection();
 
-    const taskId = uuidv4();
+    const taskId = generateTaskId();
 
     // Create a task payload with properly typed options
     // When options is undefined, we don't include it in the payload at all

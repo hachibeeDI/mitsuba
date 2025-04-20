@@ -3,12 +3,13 @@
  */
 import {v4 as uuidv4} from 'uuid';
 import {EventEmitter} from 'node:events';
-import type {BrokerInterface, TaskPayload, TaskOptions} from '../../types';
+import type {BrokerInterface, TaskPayload, TaskOptions, TaskId} from '../../types';
+import {generateTaskId} from '../../utils';
 
 type TaskHandler = (task: unknown) => Promise<unknown>;
 
 export class MockBroker implements BrokerInterface {
-  private tasks = new Map<string, TaskPayload>();
+  private tasks = new Map<TaskId, TaskPayload>();
   private handlers = new Map<string, TaskHandler>();
   private consumerTags = new Map<string, string>();
   private connected = false;
@@ -37,7 +38,7 @@ export class MockBroker implements BrokerInterface {
     this.consumerTags.clear();
   }
 
-  async publishTask(taskName: string, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<string> {
+  async publishTask(taskName: string, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId> {
     await Promise.resolve();
 
     if (!this.connected) {
@@ -48,7 +49,7 @@ export class MockBroker implements BrokerInterface {
       throw new Error('Failed to publish task');
     }
 
-    const taskId = uuidv4();
+    const taskId = generateTaskId();
     const payload: TaskPayload = {
       id: taskId,
       taskName,
@@ -122,7 +123,7 @@ export class MockBroker implements BrokerInterface {
   }
 
   // モックテスト用のヘルパーメソッド
-  getTaskById(taskId: string): TaskPayload | undefined {
+  getTaskById(taskId: TaskId): TaskPayload | undefined {
     return this.tasks.get(taskId);
   }
 

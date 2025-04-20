@@ -2,8 +2,12 @@
  * Mitsuba ユーティリティ関数
  */
 import {v4 as uuidv4} from 'uuid';
-import type {AsyncTask, TaskStatus} from './types';
+import type {AsyncTask, TaskId, TaskStatus} from './types';
 import {MitsubaError} from './errors';
+
+export function generateTaskId(prefix = ''): TaskId {
+  return `${prefix}${uuidv4()}` as TaskId;
+}
 
 /**
  * 複数のタスクを順番に実行する
@@ -11,13 +15,10 @@ import {MitsubaError} from './errors';
  * @returns 結果配列のAsyncTask
  */
 export function sequence<T>(tasks: ReadonlyArray<AsyncTask<T>>): AsyncTask<ReadonlyArray<T>> {
-  const sequenceId = `sequence-${uuidv4()}`;
-
   // 空の配列に対しては即座に成功結果を返す
   if (tasks.length === 0) {
     return {
-      id: sequenceId,
-      promise: async () => [],
+      get: async () => [],
       status: async () => 'SUCCESS',
       retry: () => {
         throw new MitsubaError('Cannot retry empty sequence task');
@@ -31,10 +32,8 @@ export function sequence<T>(tasks: ReadonlyArray<AsyncTask<T>>): AsyncTask<Reado
 
   // 結果を格納するAsyncTask
   const sequenceTask: AsyncTask<ReadonlyArray<T>> = {
-    id: sequenceId,
-
     // promise関数は実際の実行を担当
-    promise: async () => {
+    get: async () => {
       // 既に実行済みの場合はキャッシュを返す
       if (executionPromise) {
         return executionPromise;
@@ -49,7 +48,7 @@ export function sequence<T>(tasks: ReadonlyArray<AsyncTask<T>>): AsyncTask<Reado
 
             try {
               // 現在のタスクを実行
-              const result = await task.promise();
+              const result = await task.get();
 
               // 結果を配列に追加して返す
               return [...results, result];
@@ -84,7 +83,7 @@ export function sequence<T>(tasks: ReadonlyArray<AsyncTask<T>>): AsyncTask<Reado
 
       // まだ実行されていなければ実行してステータスを取得
       try {
-        await sequenceTask.promise();
+        await sequenceTask.get();
         return 'SUCCESS';
       } catch {
         return 'FAILURE';
@@ -107,18 +106,14 @@ export function sequence<T>(tasks: ReadonlyArray<AsyncTask<T>>): AsyncTask<Reado
  * @returns コールバック結果のAsyncTask
  */
 export function chord<T, R>(task: AsyncTask<ReadonlyArray<T>>, callback?: (results: ReadonlyArray<T>) => R): AsyncTask<R> {
-  const chordId = `chord-${uuidv4()}`;
-
   // 処理結果をキャッシュするための変数
   let executionPromise: Promise<R> | null = null;
   let cachedStatus: TaskStatus | null = null;
 
   // 結果を格納するAsyncTask
   const chordTask: AsyncTask<R> = {
-    id: chordId,
-
     // promise関数は実際の実行を担当
-    promise: () => {
+    get: () => {
       // 既に実行済みの場合はキャッシュを返す
       if (executionPromise) {
         return executionPromise;
@@ -128,7 +123,7 @@ export function chord<T, R>(task: AsyncTask<ReadonlyArray<T>>, callback?: (resul
       executionPromise = (async () => {
         try {
           // タスクの結果を取得
-          const results = await task.promise();
+          const results = await task.get();
 
           // コールバック関数を実行
           const result = callback ? callback(results) : (results as unknown as R);
@@ -155,7 +150,7 @@ export function chord<T, R>(task: AsyncTask<ReadonlyArray<T>>, callback?: (resul
 
       // まだ実行されていなければ実行してステータスを取得
       try {
-        await chordTask.promise();
+        await chordTask.get();
         return 'SUCCESS';
       } catch {
         return 'FAILURE';
