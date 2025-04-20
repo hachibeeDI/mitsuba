@@ -54,88 +54,43 @@ describe('Mitsuba 基本機能テスト', () => {
     messageQueue.removeAllListeners();
   });
 
-  // モック結合テスト用ヘルパー関数：タスク実行シミュレーション
-  async function processTaskAndStoreResult(taskName: string, taskId: string, args: Array<unknown>): Promise<unknown> {
-    // タスクのハンドラーを実行
-    const registry = (mitsuba as any)._taskRegistry || {};
-    const taskFn = registry[taskName];
-    if (!taskFn) {
-      throw new Error(`Task not found: ${taskName}`);
-    }
-
-    let result;
-    if (typeof taskFn === 'function') {
-      result = await taskFn(...args);
-    } else {
-      result = await taskFn.call(...args);
-    }
-
-    // タスク実行イベントを発行（ブローカーとバックエンドの連携をシミュレート）
-    messageQueue.emit('taskExecuted', {
-      taskId,
-      taskName,
-      status: 'SUCCESS',
-      result,
-    });
-
-    return result;
-  }
-
-  // タスクレジストリを直接設定するヘルパー
-  function setupTaskRegistry<T extends Record<string, unknown>>(mitsuba: Mitsuba, registry: T) {
-    (mitsuba as any)._taskRegistry = registry;
-  }
-
   // 基本的なタスク実行と結果取得のテスト
   test('基本的なタスク実行と結果取得', async () => {
     // 1. タスク定義
     const addTask = async (a: number, b: number) => a + b;
-    setupTaskRegistry(mitsuba, {addTask});
 
-    const {tasks} = mitsuba.createTask({
+    // 2. タスクとワーカーの作成
+    const {tasks, worker} = mitsuba.createTask({
       addTask,
     });
 
-    // 2. タスク実行をモック
-    // ブローカーのpublishTaskをスパイして、タスクIDを取得
-    const publishTaskSpy = vi.spyOn(mockBroker, 'publishTask');
+    // 3. ワーカーを起動 (非同期で実行)
+    await worker.start(1);
 
-    // タスク実行
+    // 4. タスク実行
     const task = tasks.addTask(3, 4);
 
-    // publishTaskが呼ばれたことを確認
-    expect(publishTaskSpy).toHaveBeenCalledWith('addTask', [3, 4], undefined);
-
-    // タスクIDを取得
-    const taskId = await publishTaskSpy.mock.results[0].value;
-
-    // 3. タスク実行と結果保存をシミュレート
-    await processTaskAndStoreResult('addTask', taskId, [3, 4]);
-
-    // 4. 結果取得
+    // 5. 結果取得
     const result = await task.promise();
 
-    // 5. 結果確認
+    // 6. 結果確認
     expect(result).toBe(7);
   });
 
   // タスク結果のバックエンドからの取得テスト
   test('タスク結果のバックエンドからの取得', async () => {
-    // 1. タスク定義
+    // 1. タスク定義と実行
     const multiplyTask = async (a: number, b: number) => a * b;
-    setupTaskRegistry(mitsuba, {multiplyTask});
 
-    const {tasks} = mitsuba.createTask({
+    const {tasks, worker} = mitsuba.createTask({
       multiplyTask,
     });
 
-    // 2. タスク実行をモック
-    const publishTaskSpy = vi.spyOn(mockBroker, 'publishTask');
-    const task = tasks.multiplyTask(5, 6);
-    const taskId = await publishTaskSpy.mock.results[0].value;
+    // 2. ワーカーを起動
+    await worker.start(1);
 
-    // 3. タスク実行と結果保存をシミュレート
-    await processTaskAndStoreResult('multiplyTask', taskId, [5, 6]);
+    // 3. タスク実行
+    const task = tasks.multiplyTask(5, 6);
 
     // 4. 結果取得
     const result = await task.promise();
@@ -143,7 +98,8 @@ describe('Mitsuba 基本機能テスト', () => {
     // 5. 結果確認
     expect(result).toBe(30);
 
-    // 6. バックエンドからも直接取得できることを確認
+    // 6. タスクIDを取得してバックエンドから直接確認
+    const taskId = await (task as any).taskPromise;
     const resultFromBackend = await mockBackend.getResult(taskId);
     expect(resultFromBackend).toBe(30);
   });
@@ -156,49 +112,44 @@ describe('Mitsuba 基本機能テスト', () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
       return value * 2;
     };
-    setupTaskRegistry(mitsuba, {slowTask});
 
-    const {tasks} = mitsuba.createTask({
+    const {tasks, worker} = mitsuba.createTask({
       slowTask,
     });
 
-    // 2. タスク実行
-    const publishTaskSpy = vi.spyOn(mockBroker, 'publishTask');
+    // 2. タスク実行 (ワーカーを起動する前)
     const task = tasks.slowTask(10);
-    const taskId = await publishTaskSpy.mock.results[0].value;
 
     // ステータスを確認（結果が保存される前）
     const pendingStatus = await task.status();
     expect(pendingStatus).toBe('PENDING');
 
-    // 3. タスク実行と結果保存をシミュレート
-    await processTaskAndStoreResult('slowTask', taskId, [10]);
+    // 3. ワーカーを起動して処理させる
+    await worker.start(1);
 
-    // 4. タスク完了後のステータスと結果を確認
+    // 4. タスク完了を待って状態を確認
     const result = await task.promise();
     const successStatus = await task.status();
 
+    // 5. 結果確認
     expect(result).toBe(20);
     expect(successStatus).toBe('SUCCESS');
   });
 
   // タスク結果の取得失敗テスト
   test('タスク結果の取得失敗', async () => {
-    // 1. タスク定義
+    // 1. タスク定義と実行
     const testTask = async (value: number) => value * 2;
-    setupTaskRegistry(mitsuba, {testTask});
 
-    const {tasks} = mitsuba.createTask({
+    const {tasks, worker} = mitsuba.createTask({
       testTask,
     });
 
-    // 2. タスク実行
-    const publishTaskSpy = vi.spyOn(mockBroker, 'publishTask');
-    const task = tasks.testTask(10);
-    const taskId = await publishTaskSpy.mock.results[0].value;
+    // 2. ワーカーを起動して処理させる
+    await worker.start(1);
 
-    // 3. タスク実行と結果保存をシミュレート
-    await processTaskAndStoreResult('testTask', taskId, [10]);
+    // 3. タスク実行
+    const task = tasks.testTask(10);
 
     // 一度成功することを確認
     const result = await task.promise();
@@ -218,41 +169,28 @@ describe('Mitsuba 基本機能テスト', () => {
   });
 
   // ワーカーのスタートと実行テスト
-  test('ワーカーのスタートと実行', async () => {
-    // 1. タスク定義
-    const processTask = async (data: string) => `processed: ${data}`;
-    setupTaskRegistry(mitsuba, {processTask});
+  test('ワーカーの並列実行', async () => {
+    // 1. 複数のタスク定義
+    const taskA = async (name: string) => `Task A: ${name}`;
+    const taskB = async (name: string) => `Task B: ${name}`;
 
     const {tasks, worker} = mitsuba.createTask({
-      processTask,
+      taskA,
+      taskB,
     });
 
-    // 2. ワーカーをスタート
-    const startSpy = vi.spyOn(mockBroker, 'consumeTask');
+    // 2. ワーカーを並列数2で起動
+    await worker.start(2);
 
-    // 非同期でワーカーを起動し、すぐに終了するようにモック
-    const workerPromise = worker.start(1).then(() => {
-      return 'worker completed';
-    });
+    // 3. 複数のタスクを同時に実行
+    const taskAPromise = tasks.taskA('test1').promise();
+    const taskBPromise = tasks.taskB('test2').promise();
 
-    // consumeTaskが呼ばれたことを確認
-    expect(startSpy).toHaveBeenCalledWith('processTask', expect.any(Function));
+    // 4. 全てのタスク完了を待つ
+    const [resultA, resultB] = await Promise.all([taskAPromise, taskBPromise]);
 
-    // 3. タスクを実行
-    const publishTaskSpy = vi.spyOn(mockBroker, 'publishTask');
-    const task = tasks.processTask('test data');
-    const taskId = await publishTaskSpy.mock.results[0].value;
-
-    // 4. タスク実行をシミュレート
-    await processTaskAndStoreResult('processTask', taskId, ['test data']);
-
-    // 5. 結果を確認
-    const result = await task.promise();
-    expect(result).toBe('processed: test data');
-
-    // 6. ワーカーの終了確認
-    await (mitsuba as any).workerPool?.stop();
-    const workerResult = await workerPromise;
-    expect(workerResult).toBe('worker completed');
+    // 5. 結果確認
+    expect(resultA).toBe('Task A: test1');
+    expect(resultB).toBe('Task B: test2');
   });
 });
