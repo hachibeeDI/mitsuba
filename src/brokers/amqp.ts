@@ -1,7 +1,9 @@
 /**
  * AMQP ブローカー実装
  */
-import * as amqp from 'amqplib';
+import type {Channel, ChannelModel, Options, Replies} from 'amqplib';
+import {connect} from 'amqplib';
+
 import {v4 as uuidv4} from 'uuid';
 import type {BrokerInterface, TaskOptions, TaskPayload} from '../types';
 import {BrokerConnectionError, BrokerError} from '../errors';
@@ -11,27 +13,27 @@ export type AMQPBrokerOptions = {
   /** AMQPサーバーURI */
   url?: string;
   /** 接続オプション */
-  connectionOptions?: amqp.Options.Connect;
+  connectionOptions?: Options.Connect;
   /** キュー設定オプション */
-  queueOptions?: amqp.Options.AssertQueue;
+  queueOptions?: Options.AssertQueue;
   /** メッセージ設定オプション */
-  messageOptions?: amqp.Options.Publish;
+  messageOptions?: Options.Publish;
   /** プリフェッチ数 */
   prefetch?: number;
 };
 
 export class AMQPBroker implements BrokerInterface {
   /** AMQPコネクション */
-  private connection: amqp.Connection | null = null;
+  private connection: ChannelModel | null = null;
   /** AMQPチャネル */
-  private channel: amqp.Channel | null = null;
+  private channel: Channel | null = null;
   /** ブローカーURL */
   private readonly url: string;
   /** コンシューマータグマップ */
-  private consumers = new Map<string, amqp.Replies.Consume>();
-  private readonly connectionOptions: amqp.Options.Connect;
-  private readonly queueOptions: amqp.Options.AssertQueue;
-  private readonly messageOptions: amqp.Options.Publish;
+  private consumers = new Map<string, Replies.Consume>();
+  private readonly connectionOptions: Options.Connect;
+  private readonly queueOptions: Options.AssertQueue;
+  private readonly messageOptions: Options.Publish;
   private readonly prefetch: number;
   private readonly logger = getLogger();
 
@@ -64,7 +66,7 @@ export class AMQPBroker implements BrokerInterface {
 
     try {
       this.logger.info(`Connecting to AMQP broker at ${this.url}`);
-      this.connection = await amqp.connect(this.url, this.connectionOptions);
+      this.connection = await connect(this.url, this.connectionOptions);
 
       if (!this.connection) {
         throw new BrokerError('Failed to create connection');

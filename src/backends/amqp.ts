@@ -1,16 +1,18 @@
 /**
  * AMQP バックエンド実装
  */
-import * as amqp from 'amqplib';
+import type {Channel, ChannelModel} from 'amqplib';
+import {connect} from 'amqplib';
+
 import type {BackendInterface} from '../types';
 import {BackendConnectionError, TaskRetrievalError, TaskTimeoutError} from '../errors';
 import {getLogger} from '../logger';
 
 export class AMQPBackend implements BackendInterface {
   /** AMQPコネクション */
-  private connection: amqp.Connection | null = null;
+  private connection: ChannelModel | null = null;
   /** AMQPチャネル */
-  private channel: amqp.Channel | null = null;
+  private channel: Channel | null = null;
   /** バックエンドURL */
   private url: string;
   /** 結果交換機名 */
@@ -36,7 +38,7 @@ export class AMQPBackend implements BackendInterface {
     }
 
     try {
-      this.connection = await amqp.connect(this.url);
+      this.connection = await connect(this.url);
 
       if (!this.connection) {
         throw new BackendConnectionError('Failed to create connection');
