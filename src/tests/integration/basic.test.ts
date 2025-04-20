@@ -71,9 +71,9 @@ describe('Mitsuba 基本機能テスト', () => {
 
     console.debug(tasks.addTask(3, 4));
 
-    expectTypeOf(await (await tasks.addTask(3, 4)).get()).toEqualTypeOf<number>();
-    expectTypeOf(await tasks.addTask2(3, '4').promise()).toEqualTypeOf<string>();
-    expectTypeOf(await tasks.asString(100).promise()).toEqualTypeOf<string>();
+    expectTypeOf(await tasks.addTask(3, 4).get()).toEqualTypeOf<number>();
+    expectTypeOf(await tasks.addTask2(3, '4').get()).toEqualTypeOf<string>();
+    expectTypeOf(await tasks.asString(100).get()).toEqualTypeOf<string>();
 
     await worker.stop();
   });
@@ -86,7 +86,7 @@ describe('Mitsuba 基本機能テスト', () => {
 
     await worker.start(1);
     const task = tasks.addTask(3, 4);
-    const result = await task.promise();
+    const result = await task.get();
     await worker.stop();
     expect(result).toBe(7);
   });
@@ -107,7 +107,7 @@ describe('Mitsuba 基本機能テスト', () => {
     const task = tasks.multiplyTask(5, 6);
 
     // 4. 結果を取得
-    const result = await task.promise();
+    const result = await task.get();
 
     // 5. ワーカーを停止
     await worker.stop();
@@ -145,7 +145,7 @@ describe('Mitsuba 基本機能テスト', () => {
     await worker.start(1);
 
     // 4. タスク完了を待って状態を確認
-    const result = await task.promise();
+    const result = await task.get();
 
     // 5. ワーカーを停止
     await worker.stop();
@@ -181,7 +181,7 @@ describe('Mitsuba 基本機能テスト', () => {
 
     // 3. 複数のタスクを実行
     const startTime = Date.now();
-    const taskPromises = [tasks.taskA('test1').promise(), tasks.taskB('test2').promise()];
+    const taskPromises = [tasks.taskA('test1').get(), tasks.taskB('test2').get()];
 
     // 4. 全てのタスク完了を待つ
     const results = await Promise.all(taskPromises);
@@ -216,7 +216,7 @@ describe('Mitsuba 基本機能テスト', () => {
 
     // 3. 10個のタスクを同時に投入
     const taskCount = 10;
-    const taskPromises = Array.from({length: taskCount}, (_, i) => tasks.incrementTask(i).promise());
+    const taskPromises = Array.from({length: taskCount}, (_, i) => tasks.incrementTask(i).get());
 
     // 4. すべてのタスク結果を待機
     const results = await Promise.all(taskPromises);

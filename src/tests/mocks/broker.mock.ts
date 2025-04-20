@@ -3,12 +3,12 @@
  */
 import {v4 as uuidv4} from 'uuid';
 import {EventEmitter} from 'node:events';
-import type {BrokerInterface, TaskPayload, TaskOptions, TaskId} from '../../types';
+import type {Broker, TaskPayload, TaskOptions, TaskId} from '../../types';
 import {generateTaskId} from '../../utils';
 
 type TaskHandler = (task: unknown) => Promise<unknown>;
 
-export class MockBroker implements BrokerInterface {
+export class MockBroker implements Broker {
   private tasks = new Map<TaskId, TaskPayload>();
   private handlers = new Map<string, TaskHandler>();
   private consumerTags = new Map<string, string>();

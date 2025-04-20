@@ -1,7 +1,7 @@
 /**
  * Mitsuba ワーカープール実装
  */
-import type {BrokerInterface, BackendInterface, TaskPayload} from './types';
+import type {Broker, Backend, TaskPayload} from './types';
 import {WorkerPoolState} from './types';
 import {WorkerOperationError} from './errors';
 import {getLogger} from './logger';
@@ -44,8 +44,8 @@ export class WorkerPool {
   private readonly stopTimeoutMs: number;
 
   private readonly logger = getLogger();
-  private readonly broker: BrokerInterface;
-  private readonly backend: BackendInterface;
+  private readonly broker: Broker;
+  private readonly backend: Backend;
   private readonly taskHandlerFn: (task: TaskPayload) => Promise<unknown>;
 
   /** ワーカーの停止制御用 */
@@ -64,12 +64,7 @@ export class WorkerPool {
    */
   private processingTasks = new Set<string>();
 
-  constructor(
-    broker: BrokerInterface,
-    backend: BackendInterface,
-    taskHandlerFn: (task: TaskPayload) => Promise<unknown>,
-    options: WorkerPoolOptions = {},
-  ) {
+  constructor(broker: Broker, backend: Backend, taskHandlerFn: (task: TaskPayload) => Promise<unknown>, options: WorkerPoolOptions = {}) {
     this.broker = broker;
     this.backend = backend;
     this.taskHandlerFn = taskHandlerFn;

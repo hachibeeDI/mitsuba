@@ -2,7 +2,7 @@
  * バックエンドのモック実装
  */
 import {EventEmitter} from 'node:events';
-import type {BackendInterface, TaskId} from '../../types';
+import type {Backend, TaskId} from '../../types';
 import {TaskRetrievalError} from '../../errors';
 
 interface StoredResult {
@@ -10,7 +10,7 @@ interface StoredResult {
   expireAt?: number;
 }
 
-export class MockBackend implements BackendInterface {
+export class MockBackend implements Backend {
   private results = new Map<TaskId, StoredResult>();
   private connected = false;
   private shouldFailStore = false;

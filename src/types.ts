@@ -52,7 +52,7 @@ export type TaskRegistry<
   Fns extends (...args: ReadonlyArray<any>) => any | TaskFunc<ReadonlyArray<any>, any>,
 > = Record<Keys, Fns>;
 
-type TaskPublisher<Args extends ReadonlyArray<unknown>, R> = (...args: Args) => Promise<AsyncTask<R>>;
+type TaskPublisher<Args extends ReadonlyArray<unknown>, R> = (...args: Args) => AsyncTask<R>;
 
 export type CreatedTask<T extends TaskRegistry<never, never>> = {
   [K in keyof T]: T[K] extends (...args: infer Args) => infer R
@@ -66,24 +66,24 @@ export type CreatedTask<T extends TaskRegistry<never, never>> = {
  * メッセージブローカーインターフェース
  * タスクの発行と消費を管理
  */
-export interface BrokerInterface {
+export type Broker = {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   publishTask(taskName: string, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId>;
   consumeTask(queueName: string, handler: (task: unknown) => Promise<unknown>): Promise<string>;
   cancelConsumer(consumerTag: string): Promise<void>;
-}
+};
 
 /**
  * バックエンドインターフェース
  * タスク実行結果の保存と取得を管理
  */
-export interface BackendInterface {
+export type Backend = {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   storeResult(taskId: TaskId, result: unknown, expiresIn?: number): Promise<void>;
   getResult<T>(taskId: TaskId): Promise<T>;
-}
+};
 
 /** ワーカープールの状態 */
 export const WorkerPoolState = {
@@ -109,9 +109,9 @@ export interface TaskPayload {
  */
 export type MitsubaOptions = {
   /** ブローカーURL または ブローカーインスタンス */
-  broker: string | BrokerInterface;
+  broker: string | Broker;
   /** バックエンドURL または バックエンドインスタンス */
-  backend: string | BackendInterface;
+  backend: string | Backend;
   /** インクルードするタスクモジュール */
   include?: ReadonlyArray<string>;
   /** 結果の有効期限（秒単位） */

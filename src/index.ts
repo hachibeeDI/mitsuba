@@ -4,8 +4,8 @@
  */
 import type {
   MitsubaOptions,
-  BrokerInterface,
-  BackendInterface,
+  Broker,
+  Backend,
   TaskRegistry,
   AsyncTask,
   TaskOptions,
@@ -24,9 +24,9 @@ import {getLogger} from './logger';
  */
 class TaskPromiseWrapper<T> implements AsyncTask<T> {
   private readonly publishResult: Promise<TaskId>;
-  private readonly backend: BackendInterface;
+  private readonly backend: Backend;
 
-  constructor(publishResult: Promise<TaskId>, backend: BackendInterface) {
+  constructor(publishResult: Promise<TaskId>, backend: Backend) {
     this.publishResult = publishResult;
     this.backend = backend;
   }
@@ -54,8 +54,8 @@ class TaskPromiseWrapper<T> implements AsyncTask<T> {
  * Mitsubaメインクラス
  */
 export class Mitsuba {
-  private broker: BrokerInterface;
-  private backend: BackendInterface;
+  private broker: Broker;
+  private backend: Backend;
   private workerPool: WorkerPool | null = null;
   private readonly logger = getLogger();
   public readonly name: string;
@@ -75,7 +75,7 @@ export class Mitsuba {
    * @returns ブローカーインスタンス
    * @throws サポートされていないプロトコルの場合
    */
-  private createBroker(broker: string | BrokerInterface): BrokerInterface {
+  private createBroker(broker: string | Broker): Broker {
     if (typeof broker !== 'string') {
       return broker;
     }
@@ -92,7 +92,7 @@ export class Mitsuba {
    * @returns バックエンドインスタンス
    * @throws サポートされていないプロトコルの場合
    */
-  private createBackend(backend: string | BackendInterface): BackendInterface {
+  private createBackend(backend: string | Backend): Backend {
     if (typeof backend !== 'string') {
       return backend;
     }

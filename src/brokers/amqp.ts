@@ -4,7 +4,7 @@
 import type {Channel, ChannelModel, Options, Replies} from 'amqplib';
 import {connect} from 'amqplib';
 
-import type {BrokerInterface, TaskId, TaskOptions, TaskPayload} from '../types';
+import type {Broker, TaskId, TaskOptions, TaskPayload} from '../types';
 import {BrokerConnectionError, BrokerError} from '../errors';
 import {getLogger} from '../logger';
 import {generateTaskId} from '../utils';
@@ -22,7 +22,7 @@ export type AMQPBrokerOptions = {
   prefetch?: number;
 };
 
-export class AMQPBroker implements BrokerInterface {
+export class AMQPBroker implements Broker {
   /** AMQPコネクション */
   private connection: ChannelModel | null = null;
   /** AMQPチャネル */

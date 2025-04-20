@@ -4,11 +4,11 @@
 import type {Channel, ChannelModel} from 'amqplib';
 import {connect} from 'amqplib';
 
-import type {BackendInterface, TaskId} from '../types';
+import type {Backend, TaskId} from '../types';
 import {BackendConnectionError, TaskRetrievalError, TaskTimeoutError} from '../errors';
 import {getLogger} from '../logger';
 
-export class AMQPBackend implements BackendInterface {
+export class AMQPBackend implements Backend {
   /** AMQPコネクション */
   private connection: ChannelModel | null = null;
   /** AMQPチャネル */
