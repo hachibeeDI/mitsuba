@@ -92,7 +92,7 @@ describe('Mitsuba 基本機能テスト', () => {
     const addTask = async (a: number, b: number) => a + b;
     setupTaskRegistry(mitsuba, {addTask});
 
-    const tasks = mitsuba.createTask({
+    const {tasks} = mitsuba.createTask({
       addTask,
     });
 
@@ -125,7 +125,7 @@ describe('Mitsuba 基本機能テスト', () => {
     const multiplyTask = async (a: number, b: number) => a * b;
     setupTaskRegistry(mitsuba, {multiplyTask});
 
-    const tasks = mitsuba.createTask({
+    const {tasks} = mitsuba.createTask({
       multiplyTask,
     });
 
@@ -158,7 +158,7 @@ describe('Mitsuba 基本機能テスト', () => {
     };
     setupTaskRegistry(mitsuba, {slowTask});
 
-    const tasks = mitsuba.createTask({
+    const {tasks} = mitsuba.createTask({
       slowTask,
     });
 
@@ -188,7 +188,7 @@ describe('Mitsuba 基本機能テスト', () => {
     const testTask = async (value: number) => value * 2;
     setupTaskRegistry(mitsuba, {testTask});
 
-    const tasks = mitsuba.createTask({
+    const {tasks} = mitsuba.createTask({
       testTask,
     });
 
@@ -215,5 +215,44 @@ describe('Mitsuba 基本機能テスト', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(TaskRetrievalError);
     }
+  });
+
+  // ワーカーのスタートと実行テスト
+  test('ワーカーのスタートと実行', async () => {
+    // 1. タスク定義
+    const processTask = async (data: string) => `processed: ${data}`;
+    setupTaskRegistry(mitsuba, {processTask});
+
+    const {tasks, worker} = mitsuba.createTask({
+      processTask,
+    });
+
+    // 2. ワーカーをスタート
+    const startSpy = vi.spyOn(mockBroker, 'consumeTask');
+
+    // 非同期でワーカーを起動し、すぐに終了するようにモック
+    const workerPromise = worker.start(1).then(() => {
+      return 'worker completed';
+    });
+
+    // consumeTaskが呼ばれたことを確認
+    expect(startSpy).toHaveBeenCalledWith('processTask', expect.any(Function));
+
+    // 3. タスクを実行
+    const publishTaskSpy = vi.spyOn(mockBroker, 'publishTask');
+    const task = tasks.processTask('test data');
+    const taskId = await publishTaskSpy.mock.results[0].value;
+
+    // 4. タスク実行をシミュレート
+    await processTaskAndStoreResult('processTask', taskId, ['test data']);
+
+    // 5. 結果を確認
+    const result = await task.promise();
+    expect(result).toBe('processed: test data');
+
+    // 6. ワーカーの終了確認
+    await (mitsuba as any).workerPool?.stop();
+    const workerResult = await workerPromise;
+    expect(workerResult).toBe('worker completed');
   });
 });

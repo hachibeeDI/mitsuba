@@ -22,3 +22,6 @@ alwaysApply: true
 - 配列の型宣言は`Array<T>`に統一。immutableな場合は`ReadonlyArray<T>`が優先される
 - 常にinterfaceよりもtypeが好ましい。interfaceが必要な場合のみinterfaceを許可する
 
+## 安全性について
+
+- プロトタイプ汚染、インスタンスメソッドの動的書き換えのような危険なコードは一切を禁止する

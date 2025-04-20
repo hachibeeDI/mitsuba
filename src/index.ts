@@ -1,12 +1,58 @@
 /**
- * Mitsuba メインエントリーポイント
- * 分散タスク処理システムのエントリーポイント
+ * Mitsuba コアクラス
+ * 分散タスク処理システムのメインエントリポイント
  */
-import type {MitsubaOptions, BrokerInterface, BackendInterface, TaskRegistry, AsyncTask, TaskOptions, TaskStatus} from './types';
+import type {
+  MitsubaOptions,
+  BrokerInterface,
+  BackendInterface,
+  TaskRegistry,
+  AsyncTask,
+  TaskOptions,
+  TaskStatus,
+  TaskPayload,
+} from './types';
 import {AMQPBroker} from './brokers/amqp';
 import {AMQPBackend} from './backends/amqp';
-import type {WorkerPool} from './worker';
+import {WorkerPool} from './worker';
 import {getLogger} from './logger';
+
+/**
+ * Promise ラッパー
+ * Publisher側で使用するAsyncTask実装
+ */
+class TaskPromiseWrapper<T> implements AsyncTask<T> {
+  private readonly taskPromise: Promise<string>;
+  private readonly backend: BackendInterface;
+
+  constructor(taskIdPromise: Promise<string>, backend: BackendInterface) {
+    this.taskPromise = taskIdPromise;
+    this.backend = backend;
+  }
+
+  get id(): string {
+    throw new Error('Cannot access task ID synchronously. Use promise() instead.');
+  }
+
+  async promise(): Promise<T> {
+    const taskId = await this.taskPromise;
+    return this.backend.getResult<T>(taskId);
+  }
+
+  async status(): Promise<TaskStatus> {
+    const taskId = await this.taskPromise;
+    try {
+      await this.backend.getResult<T>(taskId);
+      return 'SUCCESS';
+    } catch {
+      return 'PENDING';
+    }
+  }
+
+  retry(): never {
+    throw new Error('Cannot retry task before it has been published');
+  }
+}
 
 /**
  * Mitsubaメインクラス
@@ -96,28 +142,64 @@ export class Mitsuba {
   /**
    * タスクレジストリからタスク実行関数を作成
    * @param registry - タスクレジストリ
-   * @returns タスク実行関数マップ
+   * @returns タスク実行関数マップとワーカーオブジェクト
    */
-  createTask<T extends TaskRegistry<T>>(registry: T): {[K in keyof T]: (...args: Array<unknown>) => AsyncTask<unknown>} {
-    const result = {} as {[K in keyof T]: (...args: Array<unknown>) => AsyncTask<unknown>};
+  createTask<T extends TaskRegistry<T>>(
+    registry: T,
+  ): {
+    tasks: {[K in keyof T]: (...args: Array<unknown>) => AsyncTask<unknown>};
+    worker: {
+      start: (concurrency?: number) => Promise<void>;
+    };
+  } {
+    const tasks = {} as {[K in keyof T]: (...args: Array<unknown>) => AsyncTask<unknown>};
+    const registeredTaskNames: Array<string> = [];
 
     for (const [taskName, task] of Object.entries(registry)) {
+      registeredTaskNames.push(taskName);
       if (typeof task === 'function') {
-        result[taskName as keyof T] = (...args: Array<unknown>): AsyncTask<unknown> => {
+        tasks[taskName as keyof T] = (...args: Array<unknown>): AsyncTask<unknown> => {
           const taskId = this.broker.publishTask(taskName, args, undefined);
           return new TaskPromiseWrapper(taskId, this.backend);
         };
       } else {
         // タスクがオブジェクトの場合
         const taskObj = task as {opts?: TaskOptions; call: (...args: Array<unknown>) => unknown};
-        result[taskName as keyof T] = (...args: Array<unknown>): AsyncTask<unknown> => {
+        tasks[taskName as keyof T] = (...args: Array<unknown>): AsyncTask<unknown> => {
           const taskId = this.broker.publishTask(taskName, args, taskObj.opts);
           return new TaskPromiseWrapper(taskId, this.backend);
         };
       }
     }
 
-    return result;
+    // タスクハンドラー関数を作成
+    const taskHandler = async (payload: TaskPayload): Promise<unknown> => {
+      const {taskName, args} = payload;
+      const taskDef = registry[taskName as keyof T];
+
+      if (!taskDef) {
+        throw new Error(`Task not found: ${taskName}`);
+      }
+
+      if (typeof taskDef === 'function') {
+        return await Promise.resolve(taskDef(...args));
+      }
+
+      return await Promise.resolve(taskDef.call(...args));
+    };
+
+    // ワーカーオブジェクトを作成
+    const worker = {
+      start: async (concurrency = 1): Promise<void> => {
+        // 既存のworkerPoolを使用するか、新しく作成する
+        if (!this.workerPool) {
+          this.workerPool = new WorkerPool(this.broker, this.backend, taskHandler);
+        }
+        return await this.workerPool.start(registeredTaskNames, concurrency);
+      },
+    };
+
+    return {tasks, worker};
   }
 
   /**
@@ -143,43 +225,6 @@ export class Mitsuba {
 }
 
 /**
- * Promise ラッパー
- * Publisher側で使用するAsyncTask実装
- */
-class TaskPromiseWrapper<T> implements AsyncTask<T> {
-  private readonly taskPromise: Promise<string>;
-  private readonly backend: BackendInterface;
-
-  constructor(taskIdPromise: Promise<string>, backend: BackendInterface) {
-    this.taskPromise = taskIdPromise;
-    this.backend = backend;
-  }
-
-  get id(): string {
-    throw new Error('Cannot access task ID synchronously. Use promise() instead.');
-  }
-
-  async promise(): Promise<T> {
-    const taskId = await this.taskPromise;
-    return this.backend.getResult<T>(taskId);
-  }
-
-  async status(): Promise<TaskStatus> {
-    const taskId = await this.taskPromise;
-    try {
-      await this.backend.getResult<T>(taskId);
-      return 'SUCCESS';
-    } catch {
-      return 'PENDING';
-    }
-  }
-
-  retry(): never {
-    throw new Error('Cannot retry task before it has been published');
-  }
-}
-
-/**
  * Mitsubaインスタンスを作成
  * @param name - アプリケーション名
  * @param options - Mitsubaオプション
@@ -190,4 +235,4 @@ export function mitsuba(name: string, options: MitsubaOptions): Mitsuba {
 }
 
 // 必要なタイプのエクスポート
-export type {MitsubaOptions, AsyncTask, TaskOptions, TaskStatus} from './types';
+export type {MitsubaOptions, AsyncTask, TaskOptions, TaskStatus, TaskPayload, WorkerPoolState} from './types';
