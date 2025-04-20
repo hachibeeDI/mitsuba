@@ -2,6 +2,7 @@
  * Mitsuba 基本機能の結合テスト
  */
 import {describe, test, expect, beforeEach, afterEach, vi} from 'vitest';
+import {EventEmitter} from 'node:events';
 import {MockBroker} from '../mocks/broker.mock';
 import {MockBackend} from '../mocks/backend.mock';
 import {Mitsuba} from '../../index';
@@ -12,11 +13,17 @@ describe('Mitsuba 基本機能テスト', () => {
   let mockBroker: MockBroker;
   let mockBackend: MockBackend;
   let mitsuba: Mitsuba;
+  let messageQueue: EventEmitter;
 
   // 各テスト前にセットアップを実行
   beforeEach(async () => {
-    mockBroker = new MockBroker();
-    mockBackend = new MockBackend();
+    // 共有EventEmitterを作成
+    messageQueue = new EventEmitter();
+    messageQueue.setMaxListeners(100);
+
+    // 共有EventEmitterを使ってモックを作成
+    mockBroker = new MockBroker(messageQueue);
+    mockBackend = new MockBackend(messageQueue);
 
     // モックに接続
     await mockBroker.connect();
@@ -42,9 +49,12 @@ describe('Mitsuba 基本機能テスト', () => {
     mockBackend.clearResults();
     await mockBroker.disconnect();
     await mockBackend.disconnect();
+
+    // メッセージキューのクリーンアップ
+    messageQueue.removeAllListeners();
   });
 
-  // モック結合テスト用ヘルパー関数：タスク実行結果をバックエンドに保存
+  // モック結合テスト用ヘルパー関数：タスク実行シミュレーション
   async function processTaskAndStoreResult(taskName: string, taskId: string, args: Array<unknown>): Promise<unknown> {
     // タスクのハンドラーを実行
     const registry = (mitsuba as any)._taskRegistry || {};
@@ -60,8 +70,14 @@ describe('Mitsuba 基本機能テスト', () => {
       result = await taskFn.call(...args);
     }
 
-    // 結果をバックエンドに保存
-    await mockBackend.storeResult(taskId, result);
+    // タスク実行イベントを発行（ブローカーとバックエンドの連携をシミュレート）
+    messageQueue.emit('taskExecuted', {
+      taskId,
+      taskName,
+      status: 'SUCCESS',
+      result,
+    });
+
     return result;
   }
 

@@ -1,7 +1,8 @@
 /**
  * バックエンドのモック実装
  */
-import type {BackendInterface} from '../../types';
+import {EventEmitter} from 'node:events';
+import type {BackendInterface, TaskPayload} from '../../types';
 import {TaskRetrievalError} from '../../errors';
 
 interface StoredResult {
@@ -14,11 +15,36 @@ export class MockBackend implements BackendInterface {
   private connected = false;
   private shouldFailStore = false;
   private shouldFailRetrieve = false;
+  private messageQueue: EventEmitter;
+
+  constructor(messageQueue?: EventEmitter) {
+    this.messageQueue = messageQueue || new EventEmitter();
+    // Set max listeners to avoid memory leak warnings
+    this.messageQueue.setMaxListeners(100);
+  }
+
+  getMessageQueue(): EventEmitter {
+    return this.messageQueue;
+  }
 
   async connect(): Promise<void> {
     // Wait a tick to simulate async behavior
     await Promise.resolve();
     this.connected = true;
+
+    // タスク処理結果をリッスン
+    this.messageQueue.on('taskResult', (data: {taskId: string; result: unknown}) => {
+      if (data?.taskId) {
+        this.setResult(data.taskId, data.result);
+      }
+    });
+
+    // タスク実行結果をリッスン
+    this.messageQueue.on('taskExecuted', (data: {taskId: string; status: string; result?: unknown; error?: unknown}) => {
+      if (data?.taskId && data.status === 'SUCCESS' && data.result !== undefined) {
+        this.setResult(data.taskId, data.result);
+      }
+    });
   }
 
   async disconnect(): Promise<void> {
@@ -26,6 +52,10 @@ export class MockBackend implements BackendInterface {
     await Promise.resolve();
     this.connected = false;
     this.results.clear();
+
+    // イベントリスナーを削除
+    this.messageQueue.removeAllListeners('taskResult');
+    this.messageQueue.removeAllListeners('taskExecuted');
   }
 
   async storeResult(taskId: string, result: unknown, ttl?: number): Promise<void> {
@@ -49,6 +79,9 @@ export class MockBackend implements BackendInterface {
     }
 
     this.results.set(taskId, stored);
+
+    // 結果をメッセージキューに発行
+    this.messageQueue.emit('taskResult', {taskId, result});
   }
 
   async getResult<T>(taskId: string): Promise<T> {

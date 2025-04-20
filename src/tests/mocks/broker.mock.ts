@@ -2,6 +2,7 @@
  * ブローカーのモック実装
  */
 import {v4 as uuidv4} from 'uuid';
+import {EventEmitter} from 'node:events';
 import type {BrokerInterface, TaskPayload, TaskOptions} from '../../types';
 
 type TaskHandler = (task: unknown) => Promise<unknown>;
@@ -12,6 +13,17 @@ export class MockBroker implements BrokerInterface {
   private consumerTags = new Map<string, string>();
   private connected = false;
   private shouldFailPublish = false;
+  private messageQueue: EventEmitter;
+
+  constructor(messageQueue?: EventEmitter) {
+    this.messageQueue = messageQueue || new EventEmitter();
+    // Set max listeners to avoid memory leak warnings
+    this.messageQueue.setMaxListeners(100);
+  }
+
+  getMessageQueue(): EventEmitter {
+    return this.messageQueue;
+  }
 
   async connect(): Promise<void> {
     await Promise.resolve();
@@ -46,13 +58,8 @@ export class MockBroker implements BrokerInterface {
 
     this.tasks.set(taskId, payload);
 
-    // 即時実行: タスクハンドラが登録されていれば直ちに実行する
-    const handler = this.handlers.get(taskName);
-    if (handler) {
-      setTimeout(() => {
-        handler(payload).catch(console.error);
-      }, 0);
-    }
+    // タスクをメッセージキューに発行
+    this.messageQueue.emit('task', payload);
 
     return taskId;
   }
@@ -67,6 +74,33 @@ export class MockBroker implements BrokerInterface {
     const consumerTag = uuidv4();
     this.handlers.set(queueName, handler);
     this.consumerTags.set(consumerTag, queueName);
+
+    // メッセージキューからタスクを受信
+    this.messageQueue.on('task', async (payload: TaskPayload) => {
+      if (payload.taskName === queueName) {
+        try {
+          // タスク実行
+          const result = await handler(payload);
+
+          // 処理成功イベントを発行
+          this.messageQueue.emit('taskExecuted', {
+            taskId: payload.id,
+            taskName: payload.taskName,
+            status: 'SUCCESS',
+            result,
+          });
+        } catch (error) {
+          // 処理失敗イベントを発行
+          this.messageQueue.emit('taskExecuted', {
+            taskId: payload.id,
+            taskName: payload.taskName,
+            status: 'FAILURE',
+            error,
+          });
+        }
+      }
+    });
+
     return consumerTag;
   }
 
@@ -81,6 +115,9 @@ export class MockBroker implements BrokerInterface {
     if (queueName) {
       this.handlers.delete(queueName);
       this.consumerTags.delete(consumerTag);
+
+      // メッセージキューのリスナーを削除
+      this.messageQueue.removeAllListeners('task');
     }
   }
 
