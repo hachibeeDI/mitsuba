@@ -15,7 +15,7 @@ export const LogLevel = {
   SILENT: 4,
 } as const;
 
-export type LogLevel = typeof LogLevel[keyof typeof LogLevel];
+export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
 
 /**
  * ロガーの設定オプション

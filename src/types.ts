@@ -81,7 +81,7 @@ export const WorkerPoolState = {
   ERROR: 'ERROR',
 } as const;
 
-export type WorkerPoolState = typeof WorkerPoolState[keyof typeof WorkerPoolState];
+export type WorkerPoolState = (typeof WorkerPoolState)[keyof typeof WorkerPoolState];
 
 /** タスクペイロードインターフェース */
 export interface TaskPayload {
@@ -92,15 +92,15 @@ export interface TaskPayload {
   /** タスク引数 */
   args: ReadonlyArray<unknown>;
   /** タスクオプション */
-  options?: TaskOptions;
+  options?: TaskOptions | undefined;
 }
 
 /** Mitsubaオプション */
 export type MitsubaOptions = {
-  /** ブローカーURL */
-  broker: string;
-  /** バックエンドURL */
-  backend: string;
+  /** ブローカーURL または ブローカーインスタンス */
+  broker: string | BrokerInterface;
+  /** バックエンドURL または バックエンドインスタンス */
+  backend: string | BackendInterface;
   /** インクルードするタスクモジュール */
   include?: ReadonlyArray<string>;
   /** 結果の有効期限（秒） */

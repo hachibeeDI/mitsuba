@@ -2,15 +2,7 @@
  * Mitsuba メインエントリーポイント
  * 分散タスク処理システムのエントリーポイント
  */
-import type {
-  MitsubaOptions,
-  BrokerInterface,
-  BackendInterface,
-  TaskRegistry,
-  AsyncTask,
-  TaskOptions,
-  TaskStatus,
-} from './types';
+import type {MitsubaOptions, BrokerInterface, BackendInterface, TaskRegistry, AsyncTask, TaskOptions, TaskStatus} from './types';
 import {AMQPBroker} from './brokers/amqp';
 import {AMQPBackend} from './backends/amqp';
 import type {WorkerPool} from './worker';
@@ -36,10 +28,7 @@ export class Mitsuba {
    * @param name - アプリケーション名
    * @param options - Mitsubaオプション
    */
-  constructor(
-    name: string,
-    options: MitsubaOptions,
-  ) {
+  constructor(name: string, options: MitsubaOptions) {
     this.name = name;
     this.broker = this.createBroker(options.broker);
     this.backend = this.createBackend(options.backend);
@@ -47,28 +36,38 @@ export class Mitsuba {
 
   /**
    * ブローカーインスタンスを作成
-   * @param brokerUrl - ブローカーURL
+   * @param broker - ブローカーURLまたはブローカーインスタンス
    * @returns ブローカーインスタンス
    * @throws サポートされていないプロトコルの場合
    */
-  private createBroker(brokerUrl: string): BrokerInterface {
-    if (brokerUrl.startsWith('amqp://')) {
-      return new AMQPBroker({url: brokerUrl});
+  private createBroker(broker: string | BrokerInterface): BrokerInterface {
+    if (typeof broker !== 'string') {
+      return broker;
     }
-    throw new Error(`Unsupported broker protocol: ${brokerUrl}`);
+
+    if (broker.startsWith('amqp://')) {
+      return new AMQPBroker({url: broker});
+    }
+
+    throw new Error(`Unsupported broker protocol: ${broker}`);
   }
 
   /**
    * バックエンドインスタンスを作成
-   * @param backendUrl - バックエンドURL
+   * @param backend - バックエンドURLまたはバックエンドインスタンス
    * @returns バックエンドインスタンス
    * @throws サポートされていないプロトコルの場合
    */
-  private createBackend(backendUrl: string): BackendInterface {
-    if (backendUrl.startsWith('amqp://')) {
-      return new AMQPBackend(backendUrl);
+  private createBackend(backend: string | BackendInterface): BackendInterface {
+    if (typeof backend !== 'string') {
+      return backend;
     }
-    throw new Error(`Unsupported backend protocol: ${backendUrl}`);
+
+    if (backend.startsWith('amqp://')) {
+      return new AMQPBackend(backend);
+    }
+
+    throw new Error(`Unsupported backend protocol: ${backend}`);
   }
 
   /**
@@ -151,10 +150,7 @@ class TaskPromiseWrapper<T> implements AsyncTask<T> {
   private readonly taskPromise: Promise<string>;
   private readonly backend: BackendInterface;
 
-  constructor(
-    taskIdPromise: Promise<string>,
-    backend: BackendInterface,
-  ) {
+  constructor(taskIdPromise: Promise<string>, backend: BackendInterface) {
     this.taskPromise = taskIdPromise;
     this.backend = backend;
   }
