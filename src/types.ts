@@ -112,7 +112,7 @@ export type Broker = {
 export type Backend = {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
-  storeResult(taskId: TaskId, result: unknown, expiresIn?: number): Promise<void>;
+  storeResult(taskId: TaskId, result: TaskResult<unknown>, expiresIn?: number): Promise<void>;
   getResult<T>(taskId: TaskId): Promise<TaskResult<T>>;
 };
 

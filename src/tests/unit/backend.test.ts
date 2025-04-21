@@ -39,7 +39,7 @@ describe('MockBackend 単体テスト', () => {
   test('結果の保存と取得', async () => {
     // テスト用のタスクIDと結果
     const taskId = 'test-task-id' as TaskId;
-    const result = {value: 42, message: 'Success'};
+    const result = {value: 42, status: 'success'} as const;
 
     // 結果を保存
     await backend.storeResult(taskId, result);
@@ -49,10 +49,7 @@ describe('MockBackend 単体テスト', () => {
 
     // 結果を取得して検証
     const retrievedResult = await backend.getResult<typeof result>(taskId);
-    expect(retrievedResult).toEqual({
-      status: 'success',
-      value: result,
-    });
+    expect(retrievedResult).toEqual(expect.objectContaining(result));
   });
 
   // 結果が存在しない場合のエラーテスト
@@ -72,11 +69,11 @@ describe('MockBackend 単体テスト', () => {
   test('結果のクリア', async () => {
     // テスト用のタスクID1と結果1
     const taskId1 = 'test-task-id-1' as TaskId;
-    const result1 = {value: 1};
+    const result1 = {status: 'success', value: 1} as const;
 
     // テスト用のタスクID2と結果2
     const taskId2 = 'test-task-id-2' as TaskId;
-    const result2 = {value: 2};
+    const result2 = {status: 'success', value: 2} as const;
 
     // 複数の結果を保存
     await backend.storeResult(taskId1, result1);
@@ -98,7 +95,7 @@ describe('MockBackend 単体テスト', () => {
   test('直接結果設定', async () => {
     // テスト用のタスクIDと結果
     const taskId = 'Test-task-id' as TaskId;
-    const result = {status: 'completed'};
+    const result = {status: 'success', value: 'whatever'} as const;
 
     // setResultを使って直接結果を設定
     backend.setResult(taskId, result);
@@ -108,10 +105,7 @@ describe('MockBackend 単体テスト', () => {
 
     // 結果を取得して検証
     const retrievedResult = await backend.getResult<typeof result>(taskId);
-    expect(retrievedResult).toEqual({
-      status: 'success',
-      value: result,
-    });
+    expect(retrievedResult).toEqual(expect.objectContaining(result));
   });
 
   // 接続していない状態でのエラーハンドリングテスト
@@ -119,7 +113,9 @@ describe('MockBackend 単体テスト', () => {
     await backend.disconnect();
 
     // 未接続状態で結果保存するとエラーになるはず
-    await expect(() => backend.storeResult('test' as TaskId, {})).rejects.toThrowError('Backend is not connected');
+    await expect(() => backend.storeResult('test' as TaskId, {status: 'success', value: 'whatever'})).rejects.toThrowError(
+      'Backend is not connected',
+    );
 
     // 未接続状態で結果取得すると失敗結果を返すはず
     const result = await backend.getResult<unknown>('test' as TaskId);
@@ -135,13 +131,15 @@ describe('MockBackend 単体テスト', () => {
     backend.setShouldFailStore(true);
 
     // 結果保存するとエラーになるはず
-    await expect(() => backend.storeResult('test' as TaskId, {})).rejects.toThrowError('Failed to store result');
+    await expect(() => backend.storeResult('test' as TaskId, {status: 'success', value: 'whatever'})).rejects.toThrowError(
+      'Failed to store result',
+    );
 
     // 失敗フラグを解除
     backend.setShouldFailStore(false);
 
     // 正常に保存できるようになるはず
-    await backend.storeResult('test' as TaskId, {});
+    await backend.storeResult('test' as TaskId, {status: 'success', value: 'whatever'});
     expect(backend.hasResult('test' as TaskId)).toBe(true);
   });
 
@@ -149,7 +147,7 @@ describe('MockBackend 単体テスト', () => {
   test('取得失敗のシミュレーション', async () => {
     // テスト用のタスクIDと結果
     const taskId = 'test-task-id' as TaskId;
-    const result = {data: 'test'};
+    const result = {status: 'success', value: 'test'} as const;
 
     // 結果を保存
     await backend.storeResult(taskId, result);
@@ -169,9 +167,6 @@ describe('MockBackend 単体テスト', () => {
 
     // 正常に取得できるようになるはず
     const successResult = await backend.getResult<typeof result>(taskId);
-    expect(successResult).toEqual({
-      status: 'success',
-      value: result,
-    });
+    expect(successResult).toEqual(expect.objectContaining(result));
   });
 });

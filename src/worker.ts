@@ -189,9 +189,10 @@ export class WorkerPool {
   private processTaskBatch(tasks: Array<{taskName: string; payload: TaskPayload}>): void {
     for (const {taskName, payload} of tasks) {
       // 各タスクを非同期で処理
-      void this.processTask(taskName, payload).catch((error) => {
-        this.logger.error(`Error processing task ${payload.id}:`, error);
-      });
+      void this.processTask(taskName, payload).then(
+        (r) => this.backend.storeResult(payload.id, {status: 'success', value: r}, payload.options?.resultExpires),
+        (err) => this.backend.storeResult(payload.id, {status: 'failure', error: err}, payload.options?.resultExpires),
+      );
     }
   }
 
@@ -203,48 +204,22 @@ export class WorkerPool {
    * @param taskName - タスク名
    * @param payload - タスクペイロード
    */
-  private async processTask(taskName: string, payload: TaskPayload): Promise<void> {
+  private async processTask(taskName: string, payload: TaskPayload) {
     const taskId = payload.id;
 
     // タスク処理中にマーク
     this.activeTaskCount++;
     this.processingTasks.add(taskId);
 
+    this.logger.debug(`Processing task ${taskId} of type ${taskName}`);
     try {
-      this.logger.debug(`Processing task ${taskId} of type ${taskName}`);
-
       // タスク実行
-      const result = await this.taskHandlerFn(payload);
-
-      // 結果をバックエンドに保存
-      await this.backend.storeResult(taskId, result, payload.options?.resultExpires);
-
-      // taskExecutedイベントを発行して処理完了を通知
-      // 他のシステムが処理結果を監視できるようにする
-      const broker = this.broker as any;
-      if (broker.getMessageQueue) {
-        broker.getMessageQueue().emit('taskExecuted', {
-          taskId,
-          taskName,
-          status: 'SUCCESS',
-          result,
-        });
-      }
+      const r = await this.taskHandlerFn(payload);
 
       this.logger.debug(`Task ${taskId} completed successfully`);
+      return r;
     } catch (error) {
       this.logger.error(`Task ${taskId} failed:`, error);
-
-      // エラー通知をemitして他のシステムにも通知
-      const broker = this.broker as any;
-      if (broker.getMessageQueue) {
-        broker.getMessageQueue().emit('taskExecuted', {
-          taskId,
-          taskName,
-          status: 'FAILURE',
-          error,
-        });
-      }
 
       throw error;
     } finally {
