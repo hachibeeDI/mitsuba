@@ -16,15 +16,12 @@ describe('Mitsuba 基本機能テスト', () => {
   let mockBroker: MockBroker;
   let mockBackend: MockBackend;
   let mitsuba: Mitsuba;
-  let messageQueue: EventEmitter;
 
   // 各テスト前にセットアップを実行
   beforeEach(async () => {
-    // 共有EventEmitterを作成
-    messageQueue = new EventEmitter();
+    const messageQueue = new EventEmitter();
     messageQueue.setMaxListeners(100);
 
-    // 共有EventEmitterを使ってモックを作成
     mockBroker = new MockBroker(messageQueue);
     mockBackend = new MockBackend(messageQueue);
 
@@ -52,9 +49,6 @@ describe('Mitsuba 基本機能テスト', () => {
     mockBackend.clearResults();
     await mockBroker.disconnect();
     await mockBackend.disconnect();
-
-    // メッセージキューのクリーンアップ
-    messageQueue.removeAllListeners();
   });
 
   test('テスト作成の型テスト', async () => {

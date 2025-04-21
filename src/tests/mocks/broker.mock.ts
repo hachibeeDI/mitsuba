@@ -37,6 +37,7 @@ export class MockBroker implements Broker {
     this.connected = false;
     this.handlers.clear();
     this.consumerTags.clear();
+    this.messageQueue.removeAllListeners('task');
   }
 
   async publishTask(taskName: string, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId> {
