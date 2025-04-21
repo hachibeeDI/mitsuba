@@ -57,42 +57,30 @@ export class AMQPBackend implements Backend {
 
     try {
       this.connection = await connect(this.url);
-
-      if (!this.connection) {
-        throw new BackendConnectionError('Failed to create connection');
-      }
-
       this.channel = await this.connection.createChannel();
-
-      if (!this.channel) {
-        throw new BackendConnectionError('Failed to create channel');
-      }
 
       // 結果交換機を定義（direct型）
       await this.channel.assertExchange(this.resultExchange, 'direct', {durable: true});
-
-      // 接続エラーイベントハンドラ
-      this.connection.on('error', (err) => {
-        this.logger.error('AMQP connection error:', err);
-        this.cleanupConnection();
-      });
-
-      // チャネルエラーイベントハンドラ
-      this.channel.on('error', (err) => {
-        this.logger.error('AMQP channel error:', err);
-      });
-
-      // 接続クローズイベントハンドラ
-      this.connection.on('close', () => {
-        this.logger.warn('AMQP connection closed');
-        this.cleanupConnection();
-      });
     } catch (error) {
       this.cleanupConnection();
       throw new BackendConnectionError('Failed to establish connection', {
         cause: error instanceof Error ? error : new Error(String(error)),
       });
     }
+
+    this.connection.on('error', (err) => {
+      this.logger.error('AMQP connection error:', err);
+      this.cleanupConnection();
+    });
+
+    this.channel.on('error', (err) => {
+      this.logger.error('AMQP channel error:', err);
+    });
+
+    this.connection.on('close', () => {
+      this.logger.warn('AMQP connection closed');
+      this.cleanupConnection();
+    });
   }
 
   /**
@@ -160,53 +148,42 @@ export class AMQPBackend implements Backend {
       // 結果メッセージのコンシューマー
       let consumerTag = '';
       const startConsumer = async () => {
-        try {
-          if (!this.channel) {
-            const error = new BackendConnectionError('Channel is not connected');
-            resolve({status: 'failure', error});
-            return;
-          }
+        if (!this.channel) {
+          const error = new BackendConnectionError('Channel is not connected');
+          resolve({status: 'failure', error});
+          return;
+        }
 
-          const consumer = await this.channel.consume(
-            queue,
-            (msg) => {
-              if (!msg) {
-                return; // キャンセル通知の場合
-              }
+        const consumer = await this.channel.consume(
+          queue,
+          (msg) => {
+            if (!msg) {
+              return; // キャンセル通知の場合
+            }
 
-              const content = jsonSafeParse(msg.content.toString());
-              if (content.kind === 'failure') {
-                return reject(new AssertionError({message: 'Malformed JSON received', actual: content.error}));
-              }
-              if (!isChannelPayload(content.value)) {
-                return reject(new AssertionError({message: 'Invalid payload', actual: content.value}));
-              }
+            const content = jsonSafeParse(msg.content.toString());
+            if (content.kind === 'failure') {
+              return reject(new AssertionError({message: 'Malformed JSON received', actual: content.error}));
+            }
+            if (!isChannelPayload(content.value)) {
+              return reject(new AssertionError({message: 'Invalid payload', actual: content.value}));
+            }
 
-              // メッセージを確認応答
-              if (this.channel) {
-                this.channel.ack(msg);
-              }
+            // メッセージを確認応答
+            if (this.channel) {
+              this.channel.ack(msg);
+            }
 
-              clearTimeout(timeout);
-              cleanup();
+            clearTimeout(timeout);
+            cleanup();
 
-              // 結果を返す
-              resolve({status: 'success', value: content.value.result as T});
-            },
-            {noAck: false},
-          );
+            resolve({status: 'success', value: content.value.result as T});
+          },
+          {noAck: false},
+        );
 
-          if (consumer) {
-            consumerTag = consumer.consumerTag;
-          }
-        } catch (error) {
-          cleanup();
-          resolve({
-            status: 'failure',
-            error: new TaskRetrievalError(taskId, {
-              cause: error instanceof Error ? error : new Error(String(error)),
-            }),
-          });
+        if (consumer) {
+          consumerTag = consumer.consumerTag;
         }
       };
 
