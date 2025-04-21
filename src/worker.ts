@@ -5,6 +5,7 @@ import type {Broker, Backend, TaskPayload} from './types';
 import {WorkerPoolState} from './types';
 import {WorkerOperationError} from './errors';
 import {getLogger} from './logger';
+import {Queue} from './queue';
 
 /**
  * ワーカープール設定オプション
@@ -56,7 +57,7 @@ export class WorkerPool {
    * ブローカーから受信したタスクはこのキューに追加され、
    * ワーカーマネージャーによって順次処理される
    */
-  private taskQueue: Array<{taskName: string; payload: TaskPayload}> = [];
+  private taskQueue: Queue<{taskName: string; payload: TaskPayload}> = new Queue();
 
   /**
    * 現在処理中のタスクのIDセット
@@ -77,7 +78,7 @@ export class WorkerPool {
    * 非同期ノンブロッキングで動作するため、即時制御を返す
    *
    * @param taskNames - 処理するタスク名の配列
-   * @param concurrency - 各タスク名ごとの並行処理数
+   * @param concurrency - 各タスク名ごとの並行処理数 --- AIは何度教えてもNodeの並列APIを理解できないみたいなので現在は未対応
    */
   async start(taskNames: ReadonlyArray<string>, concurrency = 1): Promise<void> {
     if (this.state === WorkerPoolState.RUNNING || this.state === WorkerPoolState.STOPPING) {
@@ -93,17 +94,12 @@ export class WorkerPool {
     this.abortController = new AbortController();
     const signal = this.abortController.signal;
 
-    // タスク処理可能数を設定（タスク種別 x 並行処理数）
-    const maxConcurrentTasks = taskNames.length * concurrency;
-
     // 各タスク用のコンシューマーを設定
-    for (const taskName of taskNames) {
-      await this.setupTaskConsumer(taskName);
-    }
+    await Promise.all(taskNames.map((t) => this.setupTaskConsumer(t)));
 
     // 並行処理用のワーカータスク実行マネージャーを開始
     // このループはイベント駆動で実行され、メインスレッドをブロックしない
-    const workerManager = this.startWorkerManager(maxConcurrentTasks, signal);
+    const workerManager = this.startWorkerManager(signal);
     this.workerPromises.push(workerManager);
 
     this.logger.info(`Started worker pool for ${taskNames.length} task type(s) with concurrency ${concurrency}`);
@@ -122,7 +118,7 @@ export class WorkerPool {
     try {
       const consumerTag = await this.broker.consumeTask(taskName, (payload) => {
         // キューにタスクを追加
-        this.taskQueue.push({
+        this.taskQueue.enqueue({
           taskName,
           payload,
         });
@@ -151,49 +147,16 @@ export class WorkerPool {
    * @param signal - 停止を伝えるためのAbortSignal
    * @returns 完了を示すPromise
    */
-  private async startWorkerManager(maxConcurrentTasks: number, signal: AbortSignal): Promise<void> {
-    // ポーリング間隔（ミリ秒）
-    const pollInterval = 50;
-
-    // AbortSignalを使って停止を監視
-    while (!signal.aborted && this.state === WorkerPoolState.RUNNING) {
-      try {
-        // 同時実行可能なタスク数と現在実行中のタスク数の差分だけタスクを実行
-        const availableSlots = maxConcurrentTasks - this.processingTasks.size;
-
-        if (availableSlots > 0 && this.taskQueue.length > 0) {
-          // 実行可能なタスクを取得（最大availableSlots個）
-          const tasksToProcess = this.taskQueue.splice(0, availableSlots);
-
-          // タスクを非同期で実行（Promise.allSettledで並行処理）
-          this.processTaskBatch(tasksToProcess);
+  private async startWorkerManager(signal: AbortSignal): Promise<void> {
+    this.taskQueue.listen((queue) => {
+      let task: {taskName: string; payload: TaskPayload} | undefined;
+      do {
+        task = queue.dequeue();
+        if (task != null) {
+          void this.processTask(task.taskName, task.payload);
         }
-
-        // 次のポーリングまで待機
-        await new Promise((resolve) => setTimeout(resolve, pollInterval));
-      } catch (error) {
-        this.logger.error('Error in worker manager:', error);
-        // エラーでもループを継続（耐障害性を確保）
-      }
-    }
-
-    this.logger.info('Worker manager stopped');
-  }
-
-  /**
-   * バッチでタスクを処理
-   * 複数のタスクを非同期で同時に処理開始する
-   *
-   * @param tasks - 処理対象のタスク配列
-   */
-  private processTaskBatch(tasks: Array<{taskName: string; payload: TaskPayload}>): void {
-    for (const {taskName, payload} of tasks) {
-      // 各タスクを非同期で処理
-      void this.processTask(taskName, payload).then(
-        (r) => this.backend.storeResult(payload.id, {status: 'success', value: r}, payload.options?.resultExpires),
-        (err) => this.backend.storeResult(payload.id, {status: 'failure', error: err}, payload.options?.resultExpires),
-      );
-    }
+      } while (task);
+    }, signal);
   }
 
   /**
@@ -217,11 +180,11 @@ export class WorkerPool {
       const r = await this.taskHandlerFn(payload);
 
       this.logger.debug(`Task ${taskId} completed successfully`);
-      return r;
-    } catch (error) {
-      this.logger.error(`Task ${taskId} failed:`, error);
+      this.backend.storeResult(payload.id, {status: 'success', value: r}, payload.options?.resultExpires);
+    } catch (err) {
+      this.logger.error(`Task ${taskId} failed:`, err);
 
-      throw error;
+      this.backend.storeResult(payload.id, {status: 'failure', error: err instanceof Error ? err : new Error(String(err))}, payload.options?.resultExpires);
     } finally {
       // タスク完了
       this.activeTaskCount--;
@@ -356,7 +319,7 @@ export class WorkerPool {
     this.workerPromises = [];
     this.consumerTags.clear();
     this.activeTaskCount = 0;
-    this.taskQueue = [];
+    this.taskQueue = new Queue();
     this.processingTasks.clear();
   }
 }
