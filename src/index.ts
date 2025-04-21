@@ -13,6 +13,7 @@ import type {
   TaskPayload,
   CreatedTask,
   TaskId,
+  TaskResult,
 } from './types';
 import {AMQPBroker} from './brokers/amqp';
 import {AMQPBackend} from './backends/amqp';
@@ -25,9 +26,9 @@ import {getLogger} from './logger';
 class TaskPromiseWrapper<T> implements AsyncTask<T> {
   private readonly publishResult: Promise<TaskId>;
   private readonly backend: Backend;
-  private readonly taskExecutionPromise: Promise<T>;
-  public status: TaskStatus = 'PENDING';
-  public result: T | null = null;
+  private readonly taskExecutionPromise: Promise<TaskResult<T>>;
+  private _status: TaskStatus = 'PENDING';
+  private _result: TaskResult<T> | null = null;
 
   constructor(publishResult: Promise<TaskId>, backend: Backend) {
     this.publishResult = publishResult;
@@ -40,19 +41,23 @@ class TaskPromiseWrapper<T> implements AsyncTask<T> {
    * 結果が利用可能になるまでポーリングする
    * @private
    */
-  private async pollForResult(): Promise<T> {
+  private async pollForResult(): Promise<TaskResult<T>> {
     // タスクIDを取得し、バックエンドとの通信に使用
     const taskId = await this.publishResult;
-    this.status = 'STARTED';
+    this._status = 'STARTED';
 
-    const checkResult = async (): Promise<T> => {
+    const checkResult = async (): Promise<TaskResult<T>> => {
       try {
         // バックエンドから結果を取得（taskIdを使用）
-        this.status = 'SUCCESS';
-        return await this.backend.getResult<T>(taskId);
+        const result = await this.backend.getResult<T>(taskId);
+        this._status = result.status === 'success' ? 'SUCCESS' : 'FAILURE';
+        return result;
       } catch (error) {
-        this.status = 'FAILURE';
-        throw error;
+        this._status = 'FAILURE';
+        return {
+          status: 'failure',
+          error: error instanceof Error ? error : new Error(String(error)),
+        };
       }
     };
 
@@ -64,17 +69,58 @@ class TaskPromiseWrapper<T> implements AsyncTask<T> {
     return this.publishResult;
   }
 
-  async get(): Promise<T> {
-    if (this.status === 'SUCCESS' && this.result) {
-      return this.result;
+  async getStatus(): Promise<TaskStatus> {
+    if (this._status !== 'PENDING' && this._status !== 'STARTED') {
+      return this._status;
     }
 
-    this.result = await this.taskExecutionPromise;
-    return this.result;
+    // ステータスが決定していない場合は結果を取得して判断
+    const result = await this.get();
+    return result.status === 'success' ? 'SUCCESS' : 'FAILURE';
   }
 
-  retry(): never {
-    this.status = 'RETRY';
+  async get(): Promise<TaskResult<T>> {
+    if (this._result) {
+      return this._result;
+    }
+
+    this._result = await this.taskExecutionPromise;
+    return this._result;
+  }
+
+  async unwrap(): Promise<T> {
+    const result = await this.get();
+    if (result.status === 'success') {
+      return result.value;
+    }
+    throw result.error;
+  }
+
+  async waitUntilComplete(options?: {pollInterval?: number; timeout?: number}): Promise<TaskResult<T>> {
+    const pollInterval = options?.pollInterval || 1000;
+    const timeout = options?.timeout || 30000;
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeout) {
+      const status = await this.getStatus();
+      if (status === 'SUCCESS' || status === 'FAILURE') {
+        return this.get();
+      }
+
+      // 指定された間隔で待機
+      await new Promise((resolve) => setTimeout(resolve, pollInterval));
+    }
+
+    // タイムアウト時にはエラーを返す
+    this._status = 'FAILURE';
+    return {
+      status: 'failure',
+      error: new Error(`Task execution timed out after ${timeout}ms`),
+    };
+  }
+
+  retry(): AsyncTask<T> {
+    this._status = 'RETRY';
     throw new Error('Cannot retry task before it has been published');
   }
 }
@@ -210,6 +256,8 @@ export class Mitsuba {
         start: async (concurrency = 1): Promise<void> => {
           if (this.workerPool) {
             switch (this.workerPool.getState()) {
+              case 'RUNNING':
+                return;
               case 'ERROR':
               case 'STOPPED':
               case 'IDLE':

@@ -4,7 +4,7 @@
 import type {Channel, ChannelModel} from 'amqplib';
 import {connect} from 'amqplib';
 
-import type {Backend, TaskId} from '../types';
+import type {Backend, TaskId, TaskResult} from '../types';
 import {BackendConnectionError, TaskRetrievalError, TaskTimeoutError} from '../errors';
 import {getLogger} from '../logger';
 
@@ -142,7 +142,7 @@ export class AMQPBackend implements Backend {
    * @returns タスク結果
    * @throws バックエンドに接続していない場合またはタイムアウト
    */
-  async getResult<T>(taskId: TaskId, timeoutMs = 30000): Promise<T> {
+  async getResult<T>(taskId: TaskId, timeoutMs = 30000): Promise<TaskResult<T>> {
     await this.ensureConnection();
 
     if (!this.channel) {
@@ -161,11 +161,12 @@ export class AMQPBackend implements Backend {
 
     const queue = queueResult.queue;
 
-    return new Promise<T>((resolve, reject) => {
+    return new Promise<TaskResult<T>>((resolve, reject) => {
       // タイムアウト処理
       const timeout = setTimeout(() => {
         cleanup();
-        reject(new TaskTimeoutError(taskId, timeoutMs));
+        const error = new TaskTimeoutError(taskId, timeoutMs);
+        resolve({status: 'failure', error});
       }, timeoutMs);
 
       // 結果メッセージのコンシューマー
@@ -173,7 +174,9 @@ export class AMQPBackend implements Backend {
       const startConsumer = async () => {
         try {
           if (!this.channel) {
-            throw new BackendConnectionError('Channel is not connected');
+            const error = new BackendConnectionError('Channel is not connected');
+            resolve({status: 'failure', error});
+            return;
           }
 
           const consumer = await this.channel.consume(
@@ -197,14 +200,15 @@ export class AMQPBackend implements Backend {
                 cleanup();
 
                 // 結果を返す
-                resolve(content.result as T);
+                resolve({status: 'success', value: content.result as T});
               } catch (error) {
                 cleanup();
-                reject(
-                  new TaskRetrievalError(taskId, {
+                resolve({
+                  status: 'failure',
+                  error: new TaskRetrievalError(taskId, {
                     cause: error instanceof Error ? error : new Error(String(error)),
                   }),
-                );
+                });
               }
             },
             {noAck: false},
@@ -215,11 +219,12 @@ export class AMQPBackend implements Backend {
           }
         } catch (error) {
           cleanup();
-          reject(
-            new TaskRetrievalError(taskId, {
+          resolve({
+            status: 'failure',
+            error: new TaskRetrievalError(taskId, {
               cause: error instanceof Error ? error : new Error(String(error)),
             }),
-          );
+          });
         }
       };
 
@@ -227,18 +232,21 @@ export class AMQPBackend implements Backend {
       const bindQueue = async () => {
         try {
           if (!this.channel) {
-            throw new BackendConnectionError('Channel is not connected');
+            const error = new BackendConnectionError('Channel is not connected');
+            resolve({status: 'failure', error});
+            return;
           }
 
           await this.channel.bindQueue(queue, this.resultExchange, taskId);
           await startConsumer();
         } catch (error) {
           cleanup();
-          reject(
-            new TaskRetrievalError(taskId, {
+          resolve({
+            status: 'failure',
+            error: new TaskRetrievalError(taskId, {
               cause: error instanceof Error ? error : new Error(String(error)),
             }),
-          );
+          });
         }
       };
 

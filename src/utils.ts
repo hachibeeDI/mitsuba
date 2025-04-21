@@ -2,7 +2,7 @@
  * Mitsuba ユーティリティ関数
  */
 import {v4 as uuidv4} from 'uuid';
-import type {AsyncTask, TaskId} from './types';
+import type {AsyncTask, TaskId, TaskResult} from './types';
 import {MitsubaError} from './errors';
 
 export function generateTaskId(prefix = ''): TaskId {
@@ -20,8 +20,10 @@ export function sequence<T>(tasks: ReadonlyArray<AsyncTask<T>>): AsyncTask<Reado
   if (tasks.length === 0) {
     return {
       getTaskId: () => Promise.resolve(taskId),
-      get: async () => [],
-      status: 'SUCCESS',
+      get: async () => ({status: 'success', value: []}),
+      getStatus: async () => 'SUCCESS',
+      unwrap: async () => [],
+      waitUntilComplete: async () => ({status: 'success', value: []}),
       retry: () => {
         throw new MitsubaError('Cannot retry empty sequence task');
       },
@@ -29,50 +31,100 @@ export function sequence<T>(tasks: ReadonlyArray<AsyncTask<T>>): AsyncTask<Reado
   }
 
   // 処理結果をキャッシュするための変数
-  let executionPromise: Promise<ReadonlyArray<T>> | null = null;
+  let executionPromise: Promise<TaskResult<ReadonlyArray<T>>> | null = null;
+  let _status: 'PENDING' | 'STARTED' | 'SUCCESS' | 'FAILURE' | 'RETRY' = 'PENDING';
 
   // 結果を格納するAsyncTask
   const sequenceTask: AsyncTask<ReadonlyArray<T>> = {
-    status: 'PENDING',
     getTaskId: () => Promise.resolve(taskId),
-    // promise関数は実際の実行を担当
-    get: async () => {
+
+    getStatus: async () => {
+      if (_status !== 'PENDING') {
+        return _status;
+      }
+
+      try {
+        await sequenceTask.get();
+        return _status;
+      } catch {
+        return 'FAILURE';
+      }
+    },
+
+    // get関数は実際の実行を担当
+    get: () => {
       // 既に実行済みの場合はキャッシュを返す
       if (executionPromise) {
         return executionPromise;
       }
 
       // 初回実行時は処理を実行してキャッシュ
-      executionPromise = tasks
-        .reduce(
-          async (resultsPromise, task) => {
-            // 前のタスクまでの結果配列を取得
-            const results = await resultsPromise;
+      _status = 'STARTED';
+      executionPromise = (async () => {
+        try {
+          const results: Array<T> = [];
 
-            try {
-              // 現在のタスクを実行
-              const result = await task.get();
+          // 各タスクを順番に実行
+          for (const task of tasks) {
+            const taskResult = await task.get();
 
-              // 結果を配列に追加して返す
-              return [...results, result];
-            } catch (error) {
-              // エラー発生時はステータスを更新
-              sequenceTask.status = 'FAILURE';
-              throw error;
+            if (taskResult.status === 'failure') {
+              _status = 'FAILURE';
+              return {
+                status: 'failure',
+                error: taskResult.error,
+                retryCount: taskResult.retryCount,
+              };
             }
-          },
-          Promise.resolve([] as Array<T>),
-        )
-        .then((results) => {
-          sequenceTask.status = 'SUCCESS';
-          return results;
-        })
-        .catch((error) => {
-          sequenceTask.status = 'FAILURE';
-          throw error;
-        });
+
+            results.push(taskResult.value);
+          }
+
+          _status = 'SUCCESS';
+          return {status: 'success', value: results};
+        } catch (error) {
+          _status = 'FAILURE';
+          return {
+            status: 'failure',
+            error: error instanceof Error ? error : new Error(String(error)),
+          };
+        }
+      })();
 
       return executionPromise;
+    },
+
+    // 値を直接取得
+    unwrap: async () => {
+      const result = await sequenceTask.get();
+      if (result.status === 'success') {
+        return result.value;
+      }
+      throw result.error;
+    },
+
+    // 完了まで待機
+    waitUntilComplete: async (options) => {
+      const pollInterval = options?.pollInterval || 1000;
+      const timeout = options?.timeout || 30000;
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < timeout) {
+        const status = await sequenceTask.getStatus();
+        if (status === 'SUCCESS' || status === 'FAILURE') {
+          return await sequenceTask.get();
+        }
+
+        // 指定された間隔で待機
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+      }
+
+      // タイムアウト時にはエラーを返す
+      _status = 'FAILURE';
+      return {
+        status: 'failure',
+        error: new Error(`Sequence task execution timed out after ${timeout}ms`),
+      };
     },
 
     // retryはここでは直接サポートしない
@@ -92,14 +144,28 @@ export function sequence<T>(tasks: ReadonlyArray<AsyncTask<T>>): AsyncTask<Reado
  */
 export function chord<T, R>(task: AsyncTask<ReadonlyArray<T>>, callback?: (results: ReadonlyArray<T>) => R): AsyncTask<R> {
   // 処理結果をキャッシュするための変数
-  let executionPromise: Promise<R> | null = null;
+  let executionPromise: Promise<TaskResult<R>> | null = null;
+  let _status: 'PENDING' | 'STARTED' | 'SUCCESS' | 'FAILURE' | 'RETRY' = 'PENDING';
 
   const taskId = generateTaskId('chord-');
   // 結果を格納するAsyncTask
   const chordTask: AsyncTask<R> = {
-    status: 'PENDING',
     getTaskId: () => Promise.resolve(taskId),
-    // promise関数は実際の実行を担当
+
+    getStatus: async () => {
+      if (_status !== 'PENDING') {
+        return _status;
+      }
+
+      try {
+        await chordTask.get();
+        return _status;
+      } catch {
+        return 'FAILURE';
+      }
+    },
+
+    // get関数は実際の実行を担当
     get: () => {
       // 既に実行済みの場合はキャッシュを返す
       if (executionPromise) {
@@ -107,23 +173,71 @@ export function chord<T, R>(task: AsyncTask<ReadonlyArray<T>>, callback?: (resul
       }
 
       // 初回実行時は処理を実行してキャッシュ
+      _status = 'STARTED';
       executionPromise = (async () => {
         try {
           // タスクの結果を取得
-          const results = await task.get();
+          const taskResult = await task.get();
+
+          if (taskResult.status === 'failure') {
+            _status = 'FAILURE';
+            return {
+              status: 'failure',
+              error: taskResult.error,
+              retryCount: taskResult.retryCount,
+            };
+          }
+
+          const results = taskResult.value;
 
           // コールバック関数を実行
           const result = callback ? callback(results) : (results as unknown as R);
+          _status = 'SUCCESS';
 
-          chordTask.status = 'SUCCESS';
-          return result;
+          return {status: 'success', value: result};
         } catch (error) {
-          chordTask.status = 'FAILURE';
-          throw error;
+          _status = 'FAILURE';
+          return {
+            status: 'failure',
+            error: error instanceof Error ? error : new Error(String(error)),
+          };
         }
       })();
 
       return executionPromise;
+    },
+
+    // 値を直接取得
+    unwrap: async () => {
+      const result = await chordTask.get();
+      if (result.status === 'success') {
+        return result.value;
+      }
+      throw result.error;
+    },
+
+    // 完了まで待機
+    waitUntilComplete: async (options) => {
+      const pollInterval = options?.pollInterval || 1000;
+      const timeout = options?.timeout || 30000;
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < timeout) {
+        const status = await chordTask.getStatus();
+        if (status === 'SUCCESS' || status === 'FAILURE') {
+          return await chordTask.get();
+        }
+
+        // 指定された間隔で待機
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+      }
+
+      // タイムアウト時にはエラーを返す
+      _status = 'FAILURE';
+      return {
+        status: 'failure',
+        error: new Error(`Chord task execution timed out after ${timeout}ms`),
+      };
     },
 
     // retryはここでは直接サポートしない

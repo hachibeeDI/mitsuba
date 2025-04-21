@@ -2,7 +2,7 @@
  * バックエンドのモック実装
  */
 import {EventEmitter} from 'node:events';
-import type {Backend, TaskId} from '../../types';
+import type {Backend, TaskId, TaskResult} from '../../types';
 import {TaskRetrievalError} from '../../errors';
 
 interface StoredResult {
@@ -84,16 +84,22 @@ export class MockBackend implements Backend {
     this.messageQueue.emit('taskResult', {taskId, result});
   }
 
-  async getResult<T>(taskId: TaskId, timeout = 5000): Promise<T> {
+  async getResult<T>(taskId: TaskId, timeout = 5000): Promise<TaskResult<T>> {
     // Wait a tick to simulate async behavior
     await Promise.resolve();
 
     if (!this.connected) {
-      throw new Error('Backend is not connected');
+      return {
+        status: 'failure',
+        error: new Error('Backend is not connected'),
+      };
     }
 
     if (this.shouldFailRetrieve) {
-      throw new TaskRetrievalError(taskId);
+      return {
+        status: 'failure',
+        error: new TaskRetrievalError(taskId),
+      };
     }
 
     // Check if result is already available
@@ -112,14 +118,20 @@ export class MockBackend implements Backend {
     // Initial check
     const initialResult = checkResult();
     if (initialResult) {
-      return initialResult.result as T;
+      return {
+        status: 'success',
+        value: initialResult.result as T,
+      };
     }
 
     // Wait for result if not immediately available
-    return new Promise<T>((resolve, reject) => {
+    return new Promise<TaskResult<T>>((resolve) => {
       const timeoutId = setTimeout(() => {
         cleanup();
-        reject(new TaskRetrievalError(taskId));
+        resolve({
+          status: 'failure',
+          error: new TaskRetrievalError(taskId),
+        });
       }, timeout);
 
       const handleTaskResult = (data: {taskId: TaskId; result: unknown}) => {
@@ -127,7 +139,10 @@ export class MockBackend implements Backend {
           const result = checkResult();
           if (result) {
             cleanup();
-            resolve(result.result as T);
+            resolve({
+              status: 'success',
+              value: result.result as T,
+            });
           }
         }
       };
@@ -137,7 +152,10 @@ export class MockBackend implements Backend {
           const result = checkResult();
           if (result) {
             cleanup();
-            resolve(result.result as T);
+            resolve({
+              status: 'success',
+              value: result.result as T,
+            });
           }
         }
       };

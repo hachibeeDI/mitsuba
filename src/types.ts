@@ -27,16 +27,29 @@ export type TaskStatus = 'PENDING' | 'STARTED' | 'SUCCESS' | 'FAILURE' | 'RETRY'
 export type TaskId = Branded<string, '--task-id--'>;
 
 /**
+ * タスク結果か失敗を表す型
+ */
+export type TaskResult<T> = {status: 'success'; value: T} | {status: 'failure'; error: Error; retryCount?: number};
+
+/**
  * 非同期タスクインターフェース
  * タスク実行の状態管理と結果取得を行う
  */
 export interface AsyncTask<T> {
   getTaskId(): Promise<TaskId>;
-  /** タスク結果を取得 */
-  get(): Promise<T>;
-  status: TaskStatus;
+  /** タスク結果を取得 (成功時は値、失敗時はエラー情報を含む) */
+  get(): Promise<TaskResult<T>>;
+  /** 現在のステータスを取得 */
+  getStatus(): Promise<TaskStatus>;
+  /** 非同期待機中にステータスを監視する */
+  waitUntilComplete(options?: {
+    pollInterval?: number;
+    timeout?: number;
+  }): Promise<TaskResult<T>>;
+  /** 即座に値か例外を取得 (失敗した場合は例外をスロー) */
+  unwrap(): Promise<T>;
   /** エラー時の再試行 */
-  retry(options?: ErrorOptions): never;
+  retry(): AsyncTask<T>;
 }
 
 export type TaskFunc<Args extends ReadonlyArray<unknown>, R> = {
@@ -92,7 +105,7 @@ export type Backend = {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   storeResult(taskId: TaskId, result: unknown, expiresIn?: number): Promise<void>;
-  getResult<T>(taskId: TaskId): Promise<T>;
+  getResult<T>(taskId: TaskId): Promise<TaskResult<T>>;
 };
 
 /** ワーカープールの状態 */
