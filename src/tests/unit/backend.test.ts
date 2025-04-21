@@ -4,7 +4,7 @@
 import {describe, test, expect, beforeEach, afterEach} from 'vitest';
 import {MockBackend} from '../mocks/backend.mock';
 import {TaskRetrievalError} from '../../errors';
-import type {TaskId, TaskResult} from '../../types';
+import type {TaskId} from '../../types';
 
 describe('MockBackend 単体テスト', () => {
   let backend: MockBackend;
@@ -51,7 +51,7 @@ describe('MockBackend 単体テスト', () => {
     const retrievedResult = await backend.getResult<typeof result>(taskId);
     expect(retrievedResult).toEqual({
       status: 'success',
-      value: result
+      value: result,
     });
   });
 
@@ -110,7 +110,7 @@ describe('MockBackend 単体テスト', () => {
     const retrievedResult = await backend.getResult<typeof result>(taskId);
     expect(retrievedResult).toEqual({
       status: 'success',
-      value: result
+      value: result,
     });
   });
 
@@ -171,7 +171,7 @@ describe('MockBackend 単体テスト', () => {
     const successResult = await backend.getResult<typeof result>(taskId);
     expect(successResult).toEqual({
       status: 'success',
-      value: result
+      value: result,
     });
   });
 });

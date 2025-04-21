@@ -6,7 +6,6 @@
 import {describe, test, expect, beforeAll, afterAll} from 'vitest';
 
 import {Mitsuba} from '../../index';
-import {TaskTimeoutError} from '../../errors';
 
 // テスト用のRabbitMQ接続情報
 const RABBITMQ_URL = 'amqp://guest:guest@localhost:5672';

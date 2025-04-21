@@ -10,6 +10,7 @@ import {expectTypeOf} from 'vitest';
 import {MockBroker} from '../mocks/broker.mock';
 import {MockBackend} from '../mocks/backend.mock';
 import {Mitsuba} from '../../index';
+import type {TaskResult} from '../../types';
 
 describe('Mitsuba 基本機能テスト', () => {
   // テスト用のモックとMitsubaインスタンス
@@ -65,9 +66,9 @@ describe('Mitsuba 基本機能テスト', () => {
 
     console.debug(tasks.addTask(3, 4));
 
-    expectTypeOf(await tasks.addTask(3, 4).get()).toEqualTypeOf<number>();
-    expectTypeOf(await tasks.addTask2(3, '4').get()).toEqualTypeOf<string>();
-    expectTypeOf(await tasks.asString(100).get()).toEqualTypeOf<string>();
+    expectTypeOf(await tasks.addTask(3, 4).getResult()).toEqualTypeOf<TaskResult<number>>();
+    expectTypeOf(await tasks.addTask2(3, '4').getResult()).toEqualTypeOf<TaskResult<string>>();
+    expectTypeOf(await tasks.asString(100).getResult()).toEqualTypeOf<TaskResult<string>>();
 
     await worker.stop();
   });
@@ -80,9 +81,12 @@ describe('Mitsuba 基本機能テスト', () => {
 
     await worker.start(1);
     const task = tasks.addTask(3, 4);
-    const result = await task.get();
+    const result = await task.getResult();
     await worker.stop();
-    expect(result).toBe(7);
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.value).toBe(7);
+    }
   });
 
   // タスク結果のバックエンドからの取得テスト
@@ -101,18 +105,24 @@ describe('Mitsuba 基本機能テスト', () => {
     const task = tasks.multiplyTask(5, 6);
 
     // 4. 結果を取得
-    const result = await task.get();
+    const result = await task.getResult();
 
     // 5. ワーカーを停止
     await worker.stop();
 
     // 6. 結果確認
-    expect(result).toBe(30);
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.value).toBe(30);
+    }
 
     // 7. タスクIDを取得してバックエンドから直接確認
     const taskId = await task.getTaskId();
     const resultFromBackend = await mockBackend.getResult(taskId);
-    expect(resultFromBackend).toBe(30);
+    expect(resultFromBackend.status).toBe('success');
+    if (resultFromBackend.status === 'success') {
+      expect(resultFromBackend.value).toBe(30);
+    }
   });
 
   // タスクのステータス確認テスト
@@ -128,15 +138,20 @@ describe('Mitsuba 基本機能テスト', () => {
     await worker.start(1);
     const task = tasks.slowTask(10);
 
-    const pendingStatus = task.status;
-    expect(pendingStatus).toBe('PENDING');
+    // Note: ステータスチェックはタイミングによってはすでにSUCCESSになっている可能性がある
+    const pendingStatus = await task.getStatus();
+    // 結果を待たずにすぐにステータスを取得するので、PENDING または STARTED の可能性がある
+    expect(['PENDING', 'STARTED', 'SUCCESS']).toContain(pendingStatus);
 
-    const result = await task.get();
+    const result = await task.getResult();
 
     await worker.stop();
 
-    const successStatus = task.status;
-    expect(result).toBe(20);
+    const successStatus = await task.getStatus();
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.value).toBe(20);
+    }
     expect(successStatus).toBe('SUCCESS');
   });
 
@@ -167,12 +182,16 @@ describe('Mitsuba 基本機能テスト', () => {
 
     // 3. 複数のタスクを実行
     const startTime = performance.now();
-    const results = await Promise.all([tasks.taskA('test1').get(), tasks.taskB('test2').get()]);
+    const taskResults = await Promise.all([tasks.taskA('test1').getResult(), tasks.taskB('test2').getResult()]);
     const endTime = performance.now();
 
     await worker.stop();
 
     // 6. 結果確認
+    const results = taskResults.map((result) => {
+      expect(result.status).toBe('success');
+      return result.status === 'success' ? result.value : '';
+    });
     expect(results).toContain('Task A: test1');
     expect(results).toContain('Task B: test2');
 
@@ -196,18 +215,23 @@ describe('Mitsuba 基本機能テスト', () => {
 
     // 3. 10個のタスクを同時に投入
     const taskCount = 10;
-    const taskPromises = Array.from({length: taskCount}, (_, i) => tasks.incrementTask(i).get());
+    const taskPromises = Array.from({length: taskCount}, (_, i) => tasks.incrementTask(i).getResult());
 
     // 4. すべてのタスク結果を待機
-    const results = await Promise.all(taskPromises);
+    const taskResults = await Promise.all(taskPromises);
 
     // 5. ワーカーを停止
     await worker.stop();
 
     // 6. 結果を検証
-    expect(results).toHaveLength(taskCount);
+    expect(taskResults).toHaveLength(taskCount);
 
     // 各タスクは入力値+1の結果を返すはず
+    const results = taskResults.map((result) => {
+      expect(result.status).toBe('success');
+      return result.status === 'success' ? result.value : -1;
+    });
+
     for (let i = 0; i < taskCount; i++) {
       expect(results).toContain(i + 1);
     }

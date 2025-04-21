@@ -2,18 +2,19 @@
  * Mitsuba コアクラス
  * 分散タスク処理システムのメインエントリポイント
  */
-import type {
-  MitsubaOptions,
-  Broker,
-  Backend,
-  TaskRegistry,
-  AsyncTask,
-  TaskOptions,
-  TaskStatus,
-  TaskPayload,
-  CreatedTask,
-  TaskId,
-  TaskResult,
+import {
+  type MitsubaOptions,
+  type Broker,
+  type Backend,
+  type TaskRegistry,
+  type AsyncTask,
+  type TaskOptions,
+  type TaskStatus,
+  type TaskPayload,
+  type CreatedTask,
+  type TaskId,
+  type TaskResult,
+  unwrapResult,
 } from './types';
 import {AMQPBroker} from './brokers/amqp';
 import {AMQPBackend} from './backends/amqp';
@@ -75,11 +76,11 @@ class TaskPromiseWrapper<T> implements AsyncTask<T> {
     }
 
     // ステータスが決定していない場合は結果を取得して判断
-    const result = await this.get();
+    const result = await this.getResult();
     return result.status === 'success' ? 'SUCCESS' : 'FAILURE';
   }
 
-  async get(): Promise<TaskResult<T>> {
+  async getResult(): Promise<TaskResult<T>> {
     if (this._result) {
       return this._result;
     }
@@ -87,13 +88,8 @@ class TaskPromiseWrapper<T> implements AsyncTask<T> {
     this._result = await this.taskExecutionPromise;
     return this._result;
   }
-
-  async unwrap(): Promise<T> {
-    const result = await this.get();
-    if (result.status === 'success') {
-      return result.value;
-    }
-    throw result.error;
+  get() {
+    return unwrapResult(this.getResult());
   }
 
   async waitUntilComplete(options?: {pollInterval?: number; timeout?: number}): Promise<TaskResult<T>> {
@@ -104,7 +100,7 @@ class TaskPromiseWrapper<T> implements AsyncTask<T> {
     while (Date.now() - startTime < timeout) {
       const status = await this.getStatus();
       if (status === 'SUCCESS' || status === 'FAILURE') {
-        return this.get();
+        return this.getResult();
       }
 
       // 指定された間隔で待機

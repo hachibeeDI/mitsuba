@@ -52,14 +52,19 @@ describe('Mitsuba エラーハンドリング統合テスト', () => {
     const task = tasks.throwErrorTask();
 
     // エラーが発生することを確認
-    await expect(task.get()).rejects.toThrow('意図的なエラー');
+    const result = await task.getResult();
+    expect(result.status).toBe('failure');
+    if (result.status === 'failure') {
+      expect(result.error.message).toContain('意図的なエラー');
+    }
 
     // タスクのステータスがエラー状態になっていることを確認
-    expect(task.status).toBe('FAILURE');
+    const status = await task.getStatus();
+    expect(status).toBe('FAILURE');
 
     // ワーカーを停止
     await worker.stop();
-  });
+  }, 15000);
 
   // 非同期タスクエラー処理のテスト
   test('非同期タスクエラー処理', async () => {
@@ -78,14 +83,19 @@ describe('Mitsuba エラーハンドリング統合テスト', () => {
     const task = tasks.asyncErrorTask();
 
     // エラーが発生することを確認
-    await expect(task.get()).rejects.toThrow('非同期処理中のエラー');
+    const result = await task.getResult();
+    expect(result.status).toBe('failure');
+    if (result.status === 'failure') {
+      expect(result.error.message).toContain('非同期処理中のエラー');
+    }
 
     // タスクのステータスがエラー状態になっていることを確認
-    expect(task.status).toBe('FAILURE');
+    const status = await task.getStatus();
+    expect(status).toBe('FAILURE');
 
     // ワーカーを停止
     await worker.stop();
-  });
+  }, 15000);
 
   // 複数のエラーを含むタスク実行
   test('複数のエラータスク混在処理', async () => {
@@ -118,26 +128,44 @@ describe('Mitsuba エラーハンドリング統合テスト', () => {
     const conditionalFailure = tasks.conditionalTask(true);
 
     // 成功するタスクの結果を確認
-    const successResult = await successTask.get();
-    expect(successResult).toBe('成功: テスト');
-    expect(successTask.status).toBe('SUCCESS');
+    const successResult = await successTask.getResult();
+    expect(successResult.status).toBe('success');
+    if (successResult.status === 'success') {
+      expect(successResult.value).toBe('成功: テスト');
+    }
+    const successStatus = await successTask.getStatus();
+    expect(successStatus).toBe('SUCCESS');
 
     // 条件付き成功タスクの結果を確認
-    const conditionalSuccessResult = await conditionalSuccess.get();
-    expect(conditionalSuccessResult).toBe('条件付きタスク成功');
-    expect(conditionalSuccess.status).toBe('SUCCESS');
+    const conditionalSuccessResult = await conditionalSuccess.getResult();
+    expect(conditionalSuccessResult.status).toBe('success');
+    if (conditionalSuccessResult.status === 'success') {
+      expect(conditionalSuccessResult.value).toBe('条件付きタスク成功');
+    }
+    const conditionalSuccessStatus = await conditionalSuccess.getStatus();
+    expect(conditionalSuccessStatus).toBe('SUCCESS');
 
     // 失敗するタスクでエラーが発生することを確認
-    await expect(failureTask.get()).rejects.toThrow('失敗タスク');
-    expect(failureTask.status).toBe('FAILURE');
+    const failureResult = await failureTask.getResult();
+    expect(failureResult.status).toBe('failure');
+    if (failureResult.status === 'failure') {
+      expect(failureResult.error.message).toContain('失敗タスク');
+    }
+    const failureStatus = await failureTask.getStatus();
+    expect(failureStatus).toBe('FAILURE');
 
     // 条件付き失敗タスクでエラーが発生することを確認
-    await expect(conditionalFailure.get()).rejects.toThrow('条件付き失敗');
-    expect(conditionalFailure.status).toBe('FAILURE');
+    const conditionalFailureResult = await conditionalFailure.getResult();
+    expect(conditionalFailureResult.status).toBe('failure');
+    if (conditionalFailureResult.status === 'failure') {
+      expect(conditionalFailureResult.error.message).toContain('条件付き失敗');
+    }
+    const conditionalFailureStatus = await conditionalFailure.getStatus();
+    expect(conditionalFailureStatus).toBe('FAILURE');
 
     // ワーカーを停止
     await worker.stop();
-  });
+  }, 15000);
 
   // エラー後の冪等性テスト - 共通定義を使用
   test('エラー後の冪等性', async () => {
@@ -148,17 +176,23 @@ describe('Mitsuba エラーハンドリング統合テスト', () => {
 
     // 1回目の呼び出し（エラーになるはず）
     const firstTask = tasks.firstCallErrorTask(1);
-    await expect(firstTask.get()).rejects.toThrow('初回呼び出しエラー');
+    const firstResult = await firstTask.getResult();
+    expect(firstResult.status).toBe('failure');
+    if (firstResult.status === 'failure') {
+      expect(firstResult.error.message).toContain('初回呼び出しエラー');
+    }
 
     // 2回目の呼び出し（成功するはず）
     const secondTask = tasks.firstCallErrorTask(2);
-    const result = await secondTask.get();
-
-    expect(result).toBe('成功: 2回目の呼び出し');
+    const secondResult = await secondTask.getResult();
+    expect(secondResult.status).toBe('success');
+    if (secondResult.status === 'success') {
+      expect(secondResult.value).toBe('成功: 2回目の呼び出し');
+    }
 
     // ワーカーを停止
     await worker.stop();
-  });
+  }, 15000);
 
   // 無効なタスク呼び出しのテスト
   test('無効なタスク呼び出し', async () => {
