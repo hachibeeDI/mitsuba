@@ -3,12 +3,13 @@
  */
 import {EventEmitter} from 'node:events';
 import type {Backend, TaskId, TaskResult} from '../../types';
-import {TaskRetrievalError} from '../../errors';
+import {TaskRetrievalError, TaskTimeoutError} from '../../errors';
+import {pooling} from '../../helpers';
 
-type StoredResult = TaskResult<unknown> & {expiresAt?: number};
+type StoredResult<T> = TaskResult<T> & {expiresAt?: number};
 
 export class MockBackend implements Backend {
-  private results = new Map<TaskId, StoredResult>();
+  private results = new Map<TaskId, StoredResult<unknown>>();
   private connected = false;
   private shouldFailStore = false;
   private shouldFailRetrieve = false;
@@ -29,8 +30,8 @@ export class MockBackend implements Backend {
     await Promise.resolve();
     this.connected = true;
 
-    this.messageQueue.on('taskResult', (data: {taskId: TaskId; result: StoredResult}) => {
-      this.setResult(data.taskId, data.result);
+    this.messageQueue.on('taskResult', (data: {taskId: TaskId; result: StoredResult<unknown>}) => {
+      this.results.set(data.taskId, data.result);
     });
   }
 
@@ -56,16 +57,14 @@ export class MockBackend implements Backend {
       throw new Error('Failed to store result');
     }
 
-    const toStore: StoredResult = expiresIn ? {...result, expiresAt: Date.now() + expiresIn * 1000} : result;
+    console.log('store result', result);
+    const toStore: StoredResult<unknown> = expiresIn ? {...result, expiresAt: Date.now() + expiresIn * 1000} : result;
 
     this.results.set(taskId, toStore);
     this.messageQueue.emit('taskResult', {taskId, result});
   }
 
   async getResult<T>(taskId: TaskId, timeout = 5000): Promise<TaskResult<T>> {
-    // Wait a tick to simulate async behavior
-    await Promise.resolve();
-
     if (!this.connected) {
       return {
         status: 'failure',
@@ -80,8 +79,7 @@ export class MockBackend implements Backend {
       };
     }
 
-    // Check if result is already available
-    const checkResult = (): StoredResult | undefined => {
+    const checkResult = (): StoredResult<T> | undefined => {
       const storedResult = this.results.get(taskId);
 
       // TTLが設定されていて期限切れの場合はnullを返す
@@ -90,45 +88,26 @@ export class MockBackend implements Backend {
         return undefined;
       }
 
-      return storedResult;
+      return storedResult as StoredResult<T>;
     };
 
-    // Initial check
     const initialResult = checkResult();
     if (initialResult) {
+      console.log('initial check passed', initialResult);
       return initialResult as TaskResult<T>;
     }
 
-    // Wait for result if not immediately available
-    return new Promise<TaskResult<T>>((resolve) => {
-      const timeoutId = setTimeout(() => {
-        cleanup();
-        resolve({
-          status: 'failure',
-          error: new TaskRetrievalError(taskId),
-        });
-      }, timeout);
-
-      const handleTaskResult = (data: {taskId: TaskId; result: TaskResult<T>}) => {
-        if (data.taskId === taskId) {
-          const result = checkResult();
-          if (result) {
-            cleanup();
-            resolve(result as TaskResult<T>);
-          }
+    const interval = Math.max(1, timeout / 50);
+    return pooling(
+      () => {
+        const r = checkResult();
+        if (r == null) {
+          return {continue: true};
         }
-      };
-
-      const cleanup = () => {
-        if (this.results.has(taskId)) {
-          this.results.delete(taskId);
-        }
-        clearTimeout(timeoutId);
-        this.messageQueue.removeListener('taskResult', handleTaskResult);
-      };
-
-      this.messageQueue.on('taskResult', handleTaskResult);
-    });
+        return {continue: false, v: r};
+      },
+      {interval, maxRetry: Math.min(timeout, 50)},
+    ).catch((_err) => ({status: 'failure', error: new TaskTimeoutError(taskId, timeout)}));
   }
 
   // モックテスト用のヘルパーメソッド
@@ -142,15 +121,6 @@ export class MockBackend implements Backend {
 
   isConnected(): boolean {
     return this.connected;
-  }
-
-  // 特定のタスクの結果を直接設定（テスト用）
-  setResult(taskId: TaskId, result: StoredResult, expiresIn = 3600): void {
-    const expires = Date.now() + expiresIn * 1000;
-    this.results.set(taskId, {
-      ...result,
-      expiresAt: expires,
-    });
   }
 
   // テスト用：結果保存の失敗をシミュレートするための設定

@@ -3,7 +3,7 @@
  */
 import {describe, test, expect, beforeEach, afterEach} from 'vitest';
 import {MockBackend} from '../mocks/backend.mock';
-import {TaskRetrievalError} from '../../errors';
+import {TaskRetrievalError, TaskTimeoutError} from '../../errors';
 import type {TaskId} from '../../types';
 
 describe('MockBackend 単体テスト', () => {
@@ -60,7 +60,7 @@ describe('MockBackend 単体テスト', () => {
     const result = await backend.getResult<unknown>(nonExistingTaskId, 1);
     expect(result.status).toBe('failure');
     if (result.status === 'failure') {
-      expect(result.error).toBeInstanceOf(TaskRetrievalError);
+      expect(result.error).toBeInstanceOf(TaskTimeoutError);
       expect(result.error.message).toMatch(/non-existing-task/);
     }
   });
@@ -97,8 +97,7 @@ describe('MockBackend 単体テスト', () => {
     const taskId = 'Test-task-id' as TaskId;
     const result = {status: 'success', value: 'whatever'} as const;
 
-    // setResultを使って直接結果を設定
-    backend.setResult(taskId, result);
+    await backend.storeResult(taskId, result);
 
     // 結果が存在することを確認
     expect(backend.hasResult(taskId)).toBe(true);
