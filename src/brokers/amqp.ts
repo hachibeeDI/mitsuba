@@ -142,16 +142,15 @@ export class AMQPBroker implements Broker {
    */
   async publishTask(taskName: string, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId> {
     await this.ensureConnection();
+    if (!this.channel) {
+      throw new BrokerConnectionError('Channel is not connected');
+    }
 
     const taskId = generateTaskId();
 
     // Create a task payload with properly typed options
     // When options is undefined, we don't include it in the payload at all
     const payload: TaskPayload = options ? {id: taskId, taskName, args, options} : {id: taskId, taskName, args};
-
-    if (!this.channel) {
-      throw new BrokerConnectionError('Channel is not connected');
-    }
 
     // キューの確保
     await this.channel.assertQueue(taskName, this.queueOptions);

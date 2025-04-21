@@ -62,3 +62,11 @@ export function pooling<R>(fn: () => EachPool<R>, opts: {interval: number; maxRe
     })();
   });
 }
+
+export function jsonSafeParse<T>(str: string): {kind: 'success'; value: T} | {kind: 'failure'; error: SyntaxError} {
+  try {
+    return {kind: 'success', value: JSON.parse(str)};
+  } catch (e) {
+    return {kind: 'failure', error: e as SyntaxError};
+  }
+}

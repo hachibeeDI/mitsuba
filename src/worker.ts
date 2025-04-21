@@ -184,7 +184,11 @@ export class WorkerPool {
     } catch (err) {
       this.logger.error(`Task ${taskId} failed:`, err);
 
-      this.backend.storeResult(payload.id, {status: 'failure', error: err instanceof Error ? err : new Error(String(err))}, payload.options?.resultExpires);
+      this.backend.storeResult(
+        payload.id,
+        {status: 'failure', error: err instanceof Error ? err : new Error(String(err))},
+        payload.options?.resultExpires,
+      );
     } finally {
       // タスク完了
       this.activeTaskCount--;

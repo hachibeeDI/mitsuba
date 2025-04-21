@@ -7,17 +7,35 @@ import {connect} from 'amqplib';
 import type {Backend, TaskId, TaskResult} from '../types';
 import {BackendConnectionError, TaskRetrievalError, TaskTimeoutError} from '../errors';
 import {getLogger} from '../logger';
+import {jsonSafeParse} from '../helpers';
+import {AssertionError} from 'node:assert';
+
+type ChannelPayload = {
+  taskId: TaskId;
+  result: TaskResult<unknown>;
+  timestamp: number;
+  expires: number;
+};
+
+function isChannelPayload(payload: unknown): payload is ChannelPayload {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'taskId' in payload &&
+    'result' in payload &&
+    'timestamp' in payload &&
+    'expires' in payload
+  );
+}
 
 export class AMQPBackend implements Backend {
   /** AMQPコネクション */
   private connection: ChannelModel | null = null;
   /** AMQPチャネル */
   private channel: Channel | null = null;
-  /** バックエンドURL */
   private url: string;
   /** 結果交換機名 */
   private resultExchange = 'mitsuba.results';
-  /** ロガー */
   private readonly logger = getLogger();
 
   /**
@@ -78,42 +96,13 @@ export class AMQPBackend implements Backend {
   }
 
   /**
-   * バックエンドとの接続を切断
-   */
-  async disconnect(): Promise<void> {
-    // チャネルクローズ
-    if (this.channel) {
-      try {
-        await this.channel.close();
-      } catch (error) {
-        this.logger.error('Error closing AMQP channel:', error);
-        // エラーは飲み込んで接続クローズを続行
-      } finally {
-        this.channel = null;
-      }
-    }
-
-    // 接続クローズ
-    if (this.connection) {
-      try {
-        await this.connection.close();
-      } catch (error) {
-        this.logger.error('Error closing AMQP connection:', error);
-        // エラーは飲み込んで続行
-      } finally {
-        this.connection = null;
-      }
-    }
-  }
-
-  /**
    * タスク結果をバックエンドに保存
    * @param taskId - タスクID
    * @param result - タスク結果
    * @param expiresIn - 結果の有効期限（秒）
    * @throws バックエンドに接続していない場合
    */
-  async storeResult(taskId: TaskId, result: unknown, expiresIn = 3600): Promise<void> {
+  async storeResult(taskId: TaskId, result: TaskResult<unknown>, expiresIn = 3600): Promise<void> {
     await this.ensureConnection();
 
     if (!this.channel) {
@@ -125,7 +114,7 @@ export class AMQPBackend implements Backend {
       result,
       timestamp: Date.now(),
       expires: Date.now() + expiresIn * 1000,
-    };
+    } satisfies ChannelPayload;
 
     const success = this.channel.publish(this.resultExchange, taskId, Buffer.from(JSON.stringify(payload)), {
       expiration: String(expiresIn * 1000),
@@ -144,7 +133,6 @@ export class AMQPBackend implements Backend {
    */
   async getResult<T>(taskId: TaskId, timeoutMs = 30000): Promise<TaskResult<T>> {
     await this.ensureConnection();
-
     if (!this.channel) {
       throw new BackendConnectionError('Channel is not connected');
     }
@@ -186,30 +174,24 @@ export class AMQPBackend implements Backend {
                 return; // キャンセル通知の場合
               }
 
-              try {
-                // メッセージの内容をパース
-                const content = JSON.parse(msg.content.toString());
-
-                // メッセージを確認応答
-                if (this.channel) {
-                  this.channel.ack(msg);
-                }
-
-                // 成功したらタイムアウトをクリアしてキューをアンバインド
-                clearTimeout(timeout);
-                cleanup();
-
-                // 結果を返す
-                resolve({status: 'success', value: content.result as T});
-              } catch (error) {
-                cleanup();
-                resolve({
-                  status: 'failure',
-                  error: new TaskRetrievalError(taskId, {
-                    cause: error instanceof Error ? error : new Error(String(error)),
-                  }),
-                });
+              const content = jsonSafeParse(msg.content.toString());
+              if (content.kind === 'failure') {
+                return reject(new AssertionError({message: 'Malformed JSON received', actual: content.error}));
               }
+              if (!isChannelPayload(content.value)) {
+                return reject(new AssertionError({message: 'Invalid payload', actual: content.value}));
+              }
+
+              // メッセージを確認応答
+              if (this.channel) {
+                this.channel.ack(msg);
+              }
+
+              clearTimeout(timeout);
+              cleanup();
+
+              // 結果を返す
+              resolve({status: 'success', value: content.value.result as T});
             },
             {noAck: false},
           );
@@ -297,5 +279,19 @@ export class AMQPBackend implements Backend {
   private cleanupConnection(): void {
     this.channel = null;
     this.connection = null;
+  }
+
+  /**
+   * バックエンドとの接続を切断
+   */
+  async disconnect(): Promise<void> {
+    try {
+      await this.channel?.close();
+      await this.connection?.close();
+    } catch (error) {
+      this.logger.error('Error closing AMQP channel:', error);
+    } finally {
+      this.cleanupConnection();
+    }
   }
 }

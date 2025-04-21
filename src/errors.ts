@@ -96,7 +96,6 @@ export class TaskRetrievalError extends MitsubaError {
   name = 'TaskRetrievalError';
 
   /**
-   * タスク取得エラーを初期化
    * @param taskId - タスクID
    * @param options - エラーオプション
    */
