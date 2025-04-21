@@ -4,7 +4,7 @@
 import {describe, test, expect, beforeEach, afterEach} from 'vitest';
 import {MockBackend} from '../mocks/backend.mock';
 import {TaskRetrievalError} from '../../errors';
-import type {TaskId} from '../../types';
+import type {TaskId, TaskResult} from '../../types';
 
 describe('MockBackend 単体テスト', () => {
   let backend: MockBackend;
@@ -48,18 +48,24 @@ describe('MockBackend 単体テスト', () => {
     expect(backend.hasResult(taskId)).toBe(true);
 
     // 結果を取得して検証
-    const retrievedResult = await backend.getResult(taskId);
-    expect(retrievedResult).toEqual(result);
+    const retrievedResult = await backend.getResult<typeof result>(taskId);
+    expect(retrievedResult).toEqual({
+      status: 'success',
+      value: result
+    });
   });
 
   // 結果が存在しない場合のエラーテスト
   test('存在しない結果の取得で例外が発生', async () => {
     const nonExistingTaskId = 'non-existing-task' as TaskId;
 
-    // 存在しないタスクIDで取得を試みると例外が発生するはず
-    await expect(() => backend.getResult(nonExistingTaskId, 1)).rejects.toBeInstanceOf(TaskRetrievalError);
-    // メッセージの一部が含まれていることを確認
-    await expect(() => backend.getResult(nonExistingTaskId, 1)).rejects.toThrowError(/non-existing-task/);
+    // 存在しないタスクIDで取得を試み、失敗状態を確認
+    const result = await backend.getResult<unknown>(nonExistingTaskId, 1);
+    expect(result.status).toBe('failure');
+    if (result.status === 'failure') {
+      expect(result.error).toBeInstanceOf(TaskRetrievalError);
+      expect(result.error.message).toMatch(/non-existing-task/);
+    }
   });
 
   // 結果のクリアテスト
@@ -101,8 +107,11 @@ describe('MockBackend 単体テスト', () => {
     expect(backend.hasResult(taskId)).toBe(true);
 
     // 結果を取得して検証
-    const retrievedResult = await backend.getResult(taskId);
-    expect(retrievedResult).toEqual(result);
+    const retrievedResult = await backend.getResult<typeof result>(taskId);
+    expect(retrievedResult).toEqual({
+      status: 'success',
+      value: result
+    });
   });
 
   // 接続していない状態でのエラーハンドリングテスト
@@ -112,8 +121,12 @@ describe('MockBackend 単体テスト', () => {
     // 未接続状態で結果保存するとエラーになるはず
     await expect(() => backend.storeResult('test' as TaskId, {})).rejects.toThrowError('Backend is not connected');
 
-    // 未接続状態で結果取得するとエラーになるはず
-    await expect(() => backend.getResult('test' as TaskId)).rejects.toThrowError('Backend is not connected');
+    // 未接続状態で結果取得すると失敗結果を返すはず
+    const result = await backend.getResult<unknown>('test' as TaskId);
+    expect(result.status).toBe('failure');
+    if (result.status === 'failure') {
+      expect(result.error.message).toBe('Backend is not connected');
+    }
   });
 
   // 保存失敗のシミュレーションテスト
@@ -144,14 +157,21 @@ describe('MockBackend 単体テスト', () => {
     // 取得失敗をシミュレート
     backend.setShouldFailRetrieve(true);
 
-    // 結果取得するとエラーになるはず
-    await expect(() => backend.getResult(taskId)).rejects.toBeInstanceOf(TaskRetrievalError);
+    // 結果取得すると失敗結果を返すはず
+    const retrievedResult = await backend.getResult<typeof result>(taskId);
+    expect(retrievedResult.status).toBe('failure');
+    if (retrievedResult.status === 'failure') {
+      expect(retrievedResult.error).toBeInstanceOf(TaskRetrievalError);
+    }
 
     // 失敗フラグを解除
     backend.setShouldFailRetrieve(false);
 
     // 正常に取得できるようになるはず
-    const retrievedResult = await backend.getResult(taskId);
-    expect(retrievedResult).toEqual(result);
+    const successResult = await backend.getResult<typeof result>(taskId);
+    expect(successResult).toEqual({
+      status: 'success',
+      value: result
+    });
   });
 });
