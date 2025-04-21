@@ -7,9 +7,8 @@ import {describe, test, expect, beforeAll, afterAll} from 'vitest';
 import {Mitsuba} from '../../index';
 import {testTasks} from '../e2e/shared/task-definitions';
 import EventEmitter from 'node:events';
-import { MockBroker } from '../mocks/broker.mock';
-import { MockBackend } from '../mocks/backend.mock';
-
+import {MockBroker} from '../mocks/broker.mock';
+import {MockBackend} from '../mocks/backend.mock';
 
 describe('Mitsuba エラーハンドリング統合テスト', () => {
   let mitsuba: Mitsuba;
@@ -171,4 +170,4 @@ describe('Mitsuba エラーハンドリング統合テスト', () => {
     // テスト実行後のクリーンアップ
     await worker.stop();
   });
-}); 
+});

@@ -208,12 +208,20 @@ export class Mitsuba {
       tasks,
       worker: {
         start: async (concurrency = 1): Promise<void> => {
-          // 既存のworkerPoolを使用するか、新しく作成する
-          if (!this.workerPool) {
+          if (this.workerPool) {
+            switch (this.workerPool.getState()) {
+              case 'ERROR':
+              case 'STOPPED':
+              case 'IDLE':
+                await this.workerPool.stop().catch(() => ({}));
+                this.workerPool = new WorkerPool(this.broker, this.backend, taskHandler);
+            }
+          } else {
             this.workerPool = new WorkerPool(this.broker, this.backend, taskHandler);
           }
           return await this.workerPool.start(registeredTaskNames, concurrency);
         },
+
         stop: async (): Promise<void> => {
           if (this.workerPool) {
             await this.workerPool.stop();
