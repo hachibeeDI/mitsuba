@@ -34,16 +34,16 @@ export class AMQPBackend implements Backend {
   /** AMQPチャネル */
   private channel: Channel | null = null;
   private url: string;
-  /** 結果交換機名 */
-  private resultExchange = 'mitsuba.results';
+  private projectName: string;
   private readonly logger = getLogger();
 
   /**
    * AMQPバックエンドを初期化
    * @param url - AMQPバックエンドのURL
    */
-  constructor(url: string) {
+  constructor(url: string, projectName: string) {
     this.url = url;
+    this.projectName = projectName;
   }
 
   /**
@@ -60,7 +60,7 @@ export class AMQPBackend implements Backend {
       this.channel = await this.connection.createChannel();
 
       // 結果交換機を定義（direct型）
-      await this.channel.assertExchange(this.resultExchange, 'direct', {durable: true});
+      await this.channel.assertExchange(this.projectName, 'direct', {durable: true});
     } catch (error) {
       this.cleanupConnection();
       throw new BackendConnectionError('Failed to establish connection', {
@@ -104,9 +104,14 @@ export class AMQPBackend implements Backend {
       expires: Date.now() + expiresIn * 1000,
     } satisfies ChannelPayload;
 
-    const success = this.channel.publish(this.resultExchange, taskId, Buffer.from(JSON.stringify(payload)), {
-      expiration: String(expiresIn * 1000),
-    });
+    const success = this.channel.publish(
+      this.projectName,
+      taskId,
+      Buffer.from(JSON.stringify(payload)),
+      {
+        expiration: String(expiresIn * 1000),
+      },
+    );
 
     if (!success) {
       throw new Error(`Failed to publish result for task: ${taskId}`);
@@ -126,33 +131,42 @@ export class AMQPBackend implements Backend {
     }
 
     // 一時的なキューを作成（排他的、自動削除）
-    const queueResult = await this.channel.assertQueue('', {
+    const {queue} = await this.channel.assertQueue('', {
       exclusive: true,
       autoDelete: true,
     });
-
-    if (!queueResult || !queueResult.queue) {
-      throw new BackendConnectionError('Failed to create queue for result retrieval');
-    }
-
-    const queue = queueResult.queue;
+    await this.channel.bindQueue(queue, this.projectName, taskId);
 
     return new Promise<TaskResult<T>>((resolve, reject) => {
-      // タイムアウト処理
+      let consumerTag = '';
+      const cleanup = () => {
+        if (consumerTag && this.channel) {
+          this.channel.cancel(consumerTag).catch((err) => {
+            this.logger.error('Error canceling consumer:', err);
+          });
+        }
+
+        this.channel
+          ?.unbindQueue(queue, this.projectName, taskId)
+          ?.catch((err) => {
+            this.logger.error('Error unbinding queue:', err);
+          });
+      };
+
       const timeout = setTimeout(() => {
         cleanup();
         const error = new TaskTimeoutError(taskId, timeoutMs);
         resolve({status: 'failure', error});
       }, timeoutMs);
 
-      // 結果メッセージのコンシューマー
-      let consumerTag = '';
       const startConsumer = async () => {
         if (!this.channel) {
           const error = new BackendConnectionError('Channel is not connected');
           resolve({status: 'failure', error});
           return;
         }
+
+        this.logger.debug(`consumer started for taskId=${taskId}`);
 
         const consumer = await this.channel.consume(
           queue,
@@ -161,18 +175,17 @@ export class AMQPBackend implements Backend {
               return; // キャンセル通知の場合
             }
 
-            const content = jsonSafeParse(msg.content.toString());
+            const msgContent = msg.content.toString();
+            this.logger.debug(`consumer started for taskId=${taskId}`);
+            const content = jsonSafeParse(msgContent);
             if (content.kind === 'failure') {
-              return reject(new AssertionError({message: 'Malformed JSON received', actual: content.error}));
+              return reject(new AssertionError({message: 'Malformed JSON received', actual: msgContent}));
             }
             if (!isChannelPayload(content.value)) {
               return reject(new AssertionError({message: 'Invalid payload', actual: content.value}));
             }
 
-            // メッセージを確認応答
-            if (this.channel) {
-              this.channel.ack(msg);
-            }
+            this.channel?.ack(msg);
 
             clearTimeout(timeout);
             cleanup();
@@ -187,52 +200,7 @@ export class AMQPBackend implements Backend {
         }
       };
 
-      // キューのバインド
-      const bindQueue = async () => {
-        try {
-          if (!this.channel) {
-            const error = new BackendConnectionError('Channel is not connected');
-            resolve({status: 'failure', error});
-            return;
-          }
-
-          await this.channel.bindQueue(queue, this.resultExchange, taskId);
-          await startConsumer();
-        } catch (error) {
-          cleanup();
-          resolve({
-            status: 'failure',
-            error: new TaskRetrievalError(taskId, {
-              cause: error instanceof Error ? error : new Error(String(error)),
-            }),
-          });
-        }
-      };
-
-      // クリーンアップ関数
-      const cleanup = () => {
-        try {
-          if (consumerTag && this.channel) {
-            // コンシューマーキャンセル（エラーは無視）
-            this.channel.cancel(consumerTag).catch((err) => {
-              this.logger.error('Error canceling consumer:', err);
-            });
-          }
-
-          if (this.channel) {
-            // キューのアンバインド（エラーは無視）
-            this.channel.unbindQueue(queue, this.resultExchange, taskId).catch((err) => {
-              this.logger.error('Error unbinding queue:', err);
-            });
-          }
-        } catch (error) {
-          this.logger.error('Error during cleanup:', error);
-          // エラーは飲み込む
-        }
-      };
-
-      // バインドとコンシューマー開始
-      bindQueue().catch((err) => {
+      startConsumer().catch((err) => {
         clearTimeout(timeout);
         reject(new TaskRetrievalError(taskId, {cause: err}));
       });

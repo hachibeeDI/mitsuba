@@ -6,9 +6,11 @@ services:
     ports:
       - "5672:5672"  # AMQP protocol port
       - "15672:15672"  # Management UI port
+      - "15692:15692"  # Prometheus metrics port
     environment:
       - RABBITMQ_DEFAULT_USER=guest
       - RABBITMQ_DEFAULT_PASS=guest
+      - RABBITMQ_PLUGINS=rabbitmq_prometheus
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -16,6 +18,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    command: >
+      bash -c "rabbitmq-plugins enable rabbitmq_prometheus && rabbitmq-server"
 
   # E2Eテスト用ワーカープロセス
   worker:

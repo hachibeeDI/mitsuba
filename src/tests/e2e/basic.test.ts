@@ -13,41 +13,34 @@ import {testTasks} from './shared/task-definitions';
 const RABBITMQ_URL = 'amqp://guest:guest@localhost:5672';
 
 describe('Mitsuba E2Eテスト', () => {
-  // テスト用のMitsubaインスタンス（クライアント側）
   let mitsuba: Mitsuba;
 
-  // テスト前にRabbitMQに接続
   beforeAll(async () => {
-    // クライアント側のMitsubaインスタンスを作成
     mitsuba = new Mitsuba('e2e-test-client', {
       broker: RABBITMQ_URL,
       backend: RABBITMQ_URL,
     });
 
-    // Mitsubaの初期化
     await mitsuba.init();
     console.log('E2Eテストクライアント初期化完了: RabbitMQ接続確立');
   }, 30000); // 接続に時間がかかる場合を考慮
 
   // テスト後に接続を閉じる
   afterAll(async () => {
-    // テストクライアントの停止
     await mitsuba.close();
     console.log('E2Eテストクライアント停止完了');
   }, 10000);
 
-  // 基本的なタスク実行と結果取得のE2Eテスト
   test('基本的なタスク実行と結果取得 (E2E)', async () => {
-    // 共通タスク定義を使用
     const {tasks} = mitsuba.createTask(testTasks);
+    console.log('Task created');
 
-    // タスク実行（実行自体は外部ワーカーで行われる）
     const task = tasks.addTask(5, 7);
+    console.log('Task execed', task);
 
-    // 結果を取得
     const result = await task.getResult();
+    console.log('result receivedd', result);
 
-    // 結果確認
     expect(result).toBe(12);
   }, 15000);
 

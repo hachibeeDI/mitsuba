@@ -26,12 +26,16 @@ import {getLogger} from './logger';
  */
 class TaskPromiseWrapper<T> implements AsyncTask<T> {
   private readonly publishResult: Promise<TaskId>;
+  private readonly projectName: string;
+  private readonly taskName: string;
   private readonly backend: Backend;
   private readonly taskExecutionPromise: Promise<TaskResult<T>>;
   private _status: TaskStatus = 'PENDING';
   private _result: TaskResult<T> | null = null;
 
-  constructor(publishResult: Promise<TaskId>, backend: Backend) {
+  constructor(publishResult: Promise<TaskId>, projectName: string, taskName: string, backend: Backend) {
+    this.projectName = projectName;
+    this.taskName = taskName;
     this.publishResult = publishResult;
     this.backend = backend;
 
@@ -40,6 +44,7 @@ class TaskPromiseWrapper<T> implements AsyncTask<T> {
 
   /**
    * 結果が利用可能になるまでポーリングする
+   * FIXME: どうみてもポーリングしてない
    * @private
    */
   private async pollForResult(): Promise<TaskResult<T>> {
@@ -62,7 +67,6 @@ class TaskPromiseWrapper<T> implements AsyncTask<T> {
       }
     };
 
-    // 結果を取得するためのポーリングを開始
     return checkResult();
   }
 
@@ -152,7 +156,7 @@ export class Mitsuba {
     }
 
     if (broker.startsWith('amqp://')) {
-      return new AMQPBroker({url: broker});
+      return new AMQPBroker(this.name, broker);
     }
 
     throw new Error(`Unsupported broker protocol: ${broker}`);
@@ -169,7 +173,7 @@ export class Mitsuba {
     }
 
     if (backend.startsWith('amqp://')) {
-      return new AMQPBackend(backend);
+      return new AMQPBackend(backend, this.name);
     }
 
     throw new Error(`Unsupported backend protocol: ${backend}`);
@@ -220,13 +224,14 @@ export class Mitsuba {
       if (typeof task === 'function') {
         // can't be typesafe
         (tasks as any)[taskName] = (...args: ReadonlyArray<unknown>) => {
-          return new TaskPromiseWrapper(this.broker.publishTask(taskName, args, undefined), this.backend);
+          return new TaskPromiseWrapper(
+            this.broker.publishTask(taskName, args, undefined), taskName, this.backend);
         };
       } else {
         const taskObj = task as {opts?: TaskOptions; call: (...args: ReadonlyArray<unknown>) => unknown};
         // can't be typesafe
         (tasks as any)[taskName as keyof T] = (...args: ReadonlyArray<unknown>) => {
-          return new TaskPromiseWrapper(this.broker.publishTask(taskName, args, taskObj.opts), this.backend);
+          return new TaskPromiseWrapper(this.broker.publishTask(taskName, args, taskObj.opts), taskName , this.backend);
         };
       }
     }
@@ -277,26 +282,6 @@ export class Mitsuba {
     };
   }
 
-  /**
-   * ワーカープールを開始
-   * @param taskNames - 処理対象のタスク名配列
-   * @param concurrency - 並行処理数
-   */
-  async startWorker(taskNames: ReadonlyArray<string> = [], concurrency = 1): Promise<void> {
-    // ワーカープールがなければ作成
-    if (!this.workerPool) {
-      // 実際の実装はここで拡張する
-      this.logger.info(`Starting worker: ${this.name} with concurrency ${concurrency}`);
-
-      // タスク名がなければログ出力
-      if (taskNames.length === 0) {
-        this.logger.warn('No task names provided, worker will not consume any messages');
-      }
-
-      // 実際のワーカープール実装を作成するコードをここに追加
-      await Promise.resolve(); // 非同期処理の一例
-    }
-  }
 }
 
 /**
