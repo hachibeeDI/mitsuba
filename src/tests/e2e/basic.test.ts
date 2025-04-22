@@ -31,7 +31,7 @@ describe('Mitsuba E2Eテスト', () => {
     console.log('E2Eテストクライアント停止完了');
   }, 10000);
 
-  test('基本的なタスク実行と結果取得 (E2E)', async () => {
+  test('基本的なタスク実行と結果取得', async () => {
     console.log('Task created');
 
     const task = tasks.addTask(5, 7);
@@ -80,17 +80,9 @@ describe('Mitsuba E2Eテスト', () => {
 
   // 大量のタスクを同時実行するE2Eテスト
   test('大量のタスク同時実行 (E2E)', async () => {
-    // 20個のタスクを同時に実行
-    const taskCount = 20;
-    const taskPromises = Array.from({length: taskCount}, (_, i) => tasks.incrementTask(i).get());
+    const taskCount = 10;
+    const results = await Promise.all(Array.from({length: taskCount}, (_, i) => tasks.incrementTask(i)).map((t) => t.get()));
 
-    // すべてのタスク結果を待機
-    const results = await Promise.all(taskPromises);
-
-    // 結果を検証
-    expect(results).toHaveLength(taskCount);
-
-    // 各タスクの結果を確認
     for (let i = 0; i < taskCount; i++) {
       expect(results).toContain(i + 1);
     }

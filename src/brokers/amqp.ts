@@ -147,16 +147,12 @@ export class AMQPBroker implements Broker {
     }
 
     const taskId = generateTaskId();
-
-    // Create a task payload with properly typed options
-    // When options is undefined, we don't include it in the payload at all
     const payload: TaskPayload = options ? {id: taskId, taskName, args, options} : {id: taskId, taskName, args};
 
-    const {queue} = await this.channel.assertQueue(`${this.projectName}.${taskName}`, this.queueOptions);
-    const priority = options?.priority ?? 0;
-    const success = this.channel.sendToQueue(queue, Buffer.from(JSON.stringify(payload)), {
+    await this.channel.assertQueue(`${this.projectName}.${taskName}`, this.queueOptions);
+    const success = this.channel.sendToQueue(`${this.projectName}.${taskName}`, Buffer.from(JSON.stringify(payload)), {
       ...this.messageOptions,
-      priority,
+      priority: options?.priority ?? 0,
       messageId: taskId,
     });
 
@@ -185,11 +181,12 @@ export class AMQPBroker implements Broker {
     // キューの確保
     await this.channel.assertQueue(`${this.projectName}.${taskName}`, this.queueOptions);
 
+    this.logger.debug(`setting up task consumer for="${taskName}"`);
     // コンシューマーを設定
     const consumeReply = await this.channel.consume(
       `${this.projectName}.${taskName}`,
       async (msg) => {
-        this.logger.debug(`Start consuming ${this.projectName}.${taskName}`);
+        this.logger.info(`Start consuming ${this.projectName}.${taskName}`);
         if (!msg) {
           this.logger.warn(`Received null message from queue ${taskName}`);
           return; // キャンセル通知の場合はスキップ
@@ -203,7 +200,7 @@ export class AMQPBroker implements Broker {
           this.channel?.nack(msg, false, false);
           return;
         }
-        this.logger.debug(`Start consuming ${this.projectName}.${taskName} with message=${content.value}`);
+        this.logger.info(`Start consuming ${this.projectName}.${taskName} with message=${JSON.stringify(content.value)}`);
         if (this.isTaskPayload(content.value) === false) {
           this.logger.error(`Invalid task payload received from queue ${taskName}`);
           this.channel?.nack(msg, false, false);
@@ -213,6 +210,7 @@ export class AMQPBroker implements Broker {
         try {
           // FIXME: accepted しか返してない。クソ
           const handlerResult = await handler(content.value);
+          this.logger.debug(`Task handled result="${JSON.stringify(handlerResult)}"`);
           if (handlerResult.status === 'rejected') {
             this.logger.warn(`Task rejected: ${handlerResult.reason}`);
             // タスク拒否の場合は再キューしない

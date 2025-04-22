@@ -35,9 +35,6 @@ async function startWorker() {
   await app.init();
 
   try {
-    await worker.start(CONCURRENCY);
-    console.log(`Worker ${WORKER_ID} started with ${CONCURRENCY} concurrent processes`);
-
     // シグナルハンドリング
     process.on('SIGTERM', async () => {
       console.log(`Worker ${WORKER_ID} received SIGTERM, shutting down...`);
@@ -63,6 +60,9 @@ async function startWorker() {
 
     // keepalive（このプロセスを実行し続ける）
     console.log(`Worker ${WORKER_ID} running and waiting for tasks...`);
+
+    await worker.start(CONCURRENCY);
+    console.log(`Worker ${WORKER_ID} started with ${CONCURRENCY} concurrent processes`);
   } catch (error) {
     console.error(`Worker ${WORKER_ID} failed to start:`, error);
     process.exit(1);

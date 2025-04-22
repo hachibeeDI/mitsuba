@@ -103,6 +103,7 @@ export class AMQPBackend implements Backend {
       timestamp: Date.now(),
       expires: Date.now() + expiresIn * 1000,
     } satisfies ChannelPayload;
+    this.logger.debug(`AMQP backend storeResult="${JSON.stringify(payload)}"`);
 
     const success = this.channel.publish(this.projectName, taskId, Buffer.from(JSON.stringify(payload)), {
       expiration: String(expiresIn * 1000),
@@ -126,6 +127,8 @@ export class AMQPBackend implements Backend {
     if (!this.channel) {
       throw new BackendConnectionError('Channel is not connected');
     }
+
+    this.logger.debug(`AMQP backend getResult called for taskId=${taskId}`);
 
     // 一時的なキューを作成（排他的、自動削除）
     const {queue} = await this.channel.assertQueue('', {
@@ -171,7 +174,8 @@ export class AMQPBackend implements Backend {
             }
 
             const msgContent = msg.content.toString();
-            this.logger.debug(`consumer started for taskId=${taskId}`);
+            this.logger.debug(`Start handling consumer for taskId=${taskId} msg=${JSON.stringify(msgContent)}`);
+
             const content = jsonSafeParse(msgContent);
             if (content.kind === 'failure') {
               return reject(new AssertionError({message: 'Malformed JSON received', actual: msgContent}));
@@ -181,7 +185,6 @@ export class AMQPBackend implements Backend {
             }
 
             this.channel?.ack(msg);
-
             clearTimeout(timeout);
             cleanup();
 
