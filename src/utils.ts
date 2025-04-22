@@ -2,7 +2,7 @@
  * Mitsuba ユーティリティ関数
  */
 import {v4 as uuidv4} from 'uuid';
-import type {AsyncTask, TaskId} from './types';
+import {unwrapResult, type AsyncTask, type TaskId, type TaskResult} from './types';
 import {MitsubaError} from './errors';
 
 export function generateTaskId(prefix = ''): TaskId {
@@ -19,9 +19,10 @@ export function sequence<T>(tasks: ReadonlyArray<AsyncTask<T>>): AsyncTask<Reado
   // 空の配列に対しては即座に成功結果を返す
   if (tasks.length === 0) {
     return {
-      getTaskId: () => Promise.resolve(taskId),
-      get: async () => [],
-      status: 'SUCCESS',
+      taskId,
+      getResult: async () => ({status: 'success', value: []}),
+      get: () => Promise.resolve([]),
+      getStatus: () => 'SUCCESS',
       retry: () => {
         throw new MitsubaError('Cannot retry empty sequence task');
       },
@@ -29,53 +30,43 @@ export function sequence<T>(tasks: ReadonlyArray<AsyncTask<T>>): AsyncTask<Reado
   }
 
   // 処理結果をキャッシュするための変数
-  let executionPromise: Promise<ReadonlyArray<T>> | null = null;
+  let executionPromise: Promise<TaskResult<ReadonlyArray<T>>> | null = null;
+  let _status: 'PENDING' | 'STARTED' | 'SUCCESS' | 'FAILURE' | 'RETRY' = 'PENDING';
 
   // 結果を格納するAsyncTask
   const sequenceTask: AsyncTask<ReadonlyArray<T>> = {
-    status: 'PENDING',
-    getTaskId: () => Promise.resolve(taskId),
-    // promise関数は実際の実行を担当
-    get: async () => {
-      // 既に実行済みの場合はキャッシュを返す
+    taskId,
+
+    getStatus: () => _status,
+
+    getResult: () => {
       if (executionPromise) {
         return executionPromise;
       }
 
-      // 初回実行時は処理を実行してキャッシュ
-      executionPromise = tasks
-        .reduce(
-          async (resultsPromise, task) => {
-            // 前のタスクまでの結果配列を取得
-            const results = await resultsPromise;
+      _status = 'STARTED';
+      executionPromise = (async () => {
+        try {
+          const results = await Promise.all(tasks.map((task) => task.get()));
 
-            try {
-              // 現在のタスクを実行
-              const result = await task.get();
-
-              // 結果を配列に追加して返す
-              return [...results, result];
-            } catch (error) {
-              // エラー発生時はステータスを更新
-              sequenceTask.status = 'FAILURE';
-              throw error;
-            }
-          },
-          Promise.resolve([] as Array<T>),
-        )
-        .then((results) => {
-          sequenceTask.status = 'SUCCESS';
-          return results;
-        })
-        .catch((error) => {
-          sequenceTask.status = 'FAILURE';
-          throw error;
-        });
+          _status = 'SUCCESS';
+          return {status: 'success', value: results};
+        } catch (error) {
+          _status = 'FAILURE';
+          return {
+            status: 'failure',
+            error: error instanceof Error ? error : new Error(String(error)),
+          };
+        }
+      })();
 
       return executionPromise;
     },
 
-    // retryはここでは直接サポートしない
+    get: () => {
+      return unwrapResult(sequenceTask.getResult());
+    },
+
     retry: () => {
       throw new MitsubaError('Cannot retry sequence task directly');
     },
@@ -92,41 +83,56 @@ export function sequence<T>(tasks: ReadonlyArray<AsyncTask<T>>): AsyncTask<Reado
  */
 export function chord<T, R>(task: AsyncTask<ReadonlyArray<T>>, callback?: (results: ReadonlyArray<T>) => R): AsyncTask<R> {
   // 処理結果をキャッシュするための変数
-  let executionPromise: Promise<R> | null = null;
+  let executionPromise: Promise<TaskResult<R>> | null = null;
+  let _status: 'PENDING' | 'STARTED' | 'SUCCESS' | 'FAILURE' | 'RETRY' = 'PENDING';
 
   const taskId = generateTaskId('chord-');
   // 結果を格納するAsyncTask
   const chordTask: AsyncTask<R> = {
-    status: 'PENDING',
-    getTaskId: () => Promise.resolve(taskId),
-    // promise関数は実際の実行を担当
-    get: () => {
-      // 既に実行済みの場合はキャッシュを返す
+    taskId,
+
+    getStatus: () => _status,
+
+    getResult: () => {
       if (executionPromise) {
         return executionPromise;
       }
 
-      // 初回実行時は処理を実行してキャッシュ
+      _status = 'STARTED';
       executionPromise = (async () => {
         try {
           // タスクの結果を取得
-          const results = await task.get();
+          const taskResult = await task.getResult();
+
+          if (taskResult.status === 'failure') {
+            _status = 'FAILURE';
+            return {
+              status: 'failure',
+              error: taskResult.error,
+              retryCount: taskResult.retryCount,
+            };
+          }
+
+          const results = taskResult.value;
 
           // コールバック関数を実行
           const result = callback ? callback(results) : (results as unknown as R);
+          _status = 'SUCCESS';
 
-          chordTask.status = 'SUCCESS';
-          return result;
+          return {status: 'success', value: result};
         } catch (error) {
-          chordTask.status = 'FAILURE';
-          throw error;
+          _status = 'FAILURE';
+          return {
+            status: 'failure',
+            error: error instanceof Error ? error : new Error(String(error)),
+          };
         }
       })();
 
       return executionPromise;
     },
 
-    // retryはここでは直接サポートしない
+    get: () => unwrapResult(chordTask.getResult()),
     retry: () => {
       throw new MitsubaError('Cannot retry chord task directly');
     },

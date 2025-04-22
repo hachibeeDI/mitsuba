@@ -5,6 +5,7 @@ import type {Broker, Backend, TaskPayload} from './types';
 import {WorkerPoolState} from './types';
 import {WorkerOperationError} from './errors';
 import {getLogger} from './logger';
+import {Queue} from './queue';
 
 /**
  * ワーカープール設定オプション
@@ -32,7 +33,7 @@ export class WorkerPool {
    * キー: ワーカーID、値: ブローカーから返されたコンシューマータグ
    * (コンシューマータグはリスナーの登録解除に必須)
    */
-  private consumerTags = new Map<string, string>();
+  private consumerTags: ReadonlySet<string> = new Set<string>();
 
   /** 現在の実行状態 */
   private state: WorkerPoolState = WorkerPoolState.IDLE;
@@ -56,7 +57,7 @@ export class WorkerPool {
    * ブローカーから受信したタスクはこのキューに追加され、
    * ワーカーマネージャーによって順次処理される
    */
-  private taskQueue: Array<{taskName: string; payload: TaskPayload}> = [];
+  private taskQueue: Queue<{taskName: string; payload: TaskPayload}> = new Queue();
 
   /**
    * 現在処理中のタスクのIDセット
@@ -77,13 +78,12 @@ export class WorkerPool {
    * 非同期ノンブロッキングで動作するため、即時制御を返す
    *
    * @param taskNames - 処理するタスク名の配列
-   * @param concurrency - 各タスク名ごとの並行処理数
+   * @param concurrency - 各タスク名ごとの並行処理数 --- AIは何度教えてもNodeの並列APIを理解できないみたいなので現在は未対応
    */
   async start(taskNames: ReadonlyArray<string>, concurrency = 1): Promise<void> {
     if (this.state === WorkerPoolState.RUNNING || this.state === WorkerPoolState.STOPPING) {
       throw new WorkerOperationError(`Cannot start worker pool in ${this.state} state`);
     }
-
     if (taskNames.length === 0) {
       this.logger.warn('No tasks registered, worker will not consume any messages');
       return;
@@ -91,19 +91,11 @@ export class WorkerPool {
 
     this.state = WorkerPoolState.RUNNING;
     this.abortController = new AbortController();
-    const signal = this.abortController.signal;
 
-    // タスク処理可能数を設定（タスク種別 x 並行処理数）
-    const maxConcurrentTasks = taskNames.length * concurrency;
+    this.consumerTags = new Set(await Promise.all(taskNames.map((t) => this.setupTaskConsumer(t))));
 
-    // 各タスク用のコンシューマーを設定
-    for (const taskName of taskNames) {
-      await this.setupTaskConsumer(taskName);
-    }
-
-    // 並行処理用のワーカータスク実行マネージャーを開始
-    // このループはイベント駆動で実行され、メインスレッドをブロックしない
-    const workerManager = this.startWorkerManager(maxConcurrentTasks, signal);
+    const workerManager = this.startWorkerManager(this.abortController.signal);
+    // FIXME:
     this.workerPromises.push(workerManager);
 
     this.logger.info(`Started worker pool for ${taskNames.length} task type(s) with concurrency ${concurrency}`);
@@ -116,26 +108,23 @@ export class WorkerPool {
    * タスクコンシューマーをセットアップ
    * 特定のタスク名に対するリスナーを登録し、consumerTagsマップに保存する
    */
-  private async setupTaskConsumer(taskName: string): Promise<void> {
+  private async setupTaskConsumer(taskName: string): Promise<string> {
     const workerId = `worker-${taskName}-${Date.now()}`;
 
     try {
-      const consumerTag = await this.broker.consumeTask(taskName, (payload) => {
-        // キューにタスクを追加
-        this.taskQueue.push({
+      const tag = await this.broker.consumeTask(taskName, (payload) => {
+        this.taskQueue.enqueue({
           taskName,
           payload,
         });
 
-        // タスクを受け付けた状態を返す
         return Promise.resolve({
           status: 'accepted',
           taskId: payload.id,
         });
       });
-
-      this.consumerTags.set(workerId, consumerTag);
-      this.logger.debug(`Registered consumer for ${taskName} with ID ${workerId} (tag: ${consumerTag})`);
+      this.logger.debug(`Registered consumer for ${taskName} with ID ${workerId} (tag: ${tag})`);
+      return tag;
     } catch (error) {
       this.logger.error(`Failed to setup consumer for ${taskName}:`, error);
       throw error;
@@ -151,48 +140,18 @@ export class WorkerPool {
    * @param signal - 停止を伝えるためのAbortSignal
    * @returns 完了を示すPromise
    */
-  private async startWorkerManager(maxConcurrentTasks: number, signal: AbortSignal): Promise<void> {
-    // ポーリング間隔（ミリ秒）
-    const pollInterval = 50;
-
-    // AbortSignalを使って停止を監視
-    while (!signal.aborted && this.state === WorkerPoolState.RUNNING) {
-      try {
-        // 同時実行可能なタスク数と現在実行中のタスク数の差分だけタスクを実行
-        const availableSlots = maxConcurrentTasks - this.processingTasks.size;
-
-        if (availableSlots > 0 && this.taskQueue.length > 0) {
-          // 実行可能なタスクを取得（最大availableSlots個）
-          const tasksToProcess = this.taskQueue.splice(0, availableSlots);
-
-          // タスクを非同期で実行（Promise.allSettledで並行処理）
-          this.processTaskBatch(tasksToProcess);
+  private async startWorkerManager(signal: AbortSignal): Promise<void> {
+    this.taskQueue.listen((queue) => {
+      this.logger.debug('Enqueue detected');
+      let task: {taskName: string; payload: TaskPayload} | undefined;
+      do {
+        task = queue.dequeue();
+        if (task != null) {
+          this.logger.debug(`Start Processing task ${JSON.stringify(task)}`);
+          void this.processTask(task.taskName, task.payload);
         }
-
-        // 次のポーリングまで待機
-        await new Promise((resolve) => setTimeout(resolve, pollInterval));
-      } catch (error) {
-        this.logger.error('Error in worker manager:', error);
-        // エラーでもループを継続（耐障害性を確保）
-      }
-    }
-
-    this.logger.info('Worker manager stopped');
-  }
-
-  /**
-   * バッチでタスクを処理
-   * 複数のタスクを非同期で同時に処理開始する
-   *
-   * @param tasks - 処理対象のタスク配列
-   */
-  private processTaskBatch(tasks: Array<{taskName: string; payload: TaskPayload}>): void {
-    for (const {taskName, payload} of tasks) {
-      // 各タスクを非同期で処理
-      void this.processTask(taskName, payload).catch((error) => {
-        this.logger.error(`Error processing task ${payload.id}:`, error);
-      });
-    }
+      } while (task);
+    }, signal);
   }
 
   /**
@@ -203,50 +162,28 @@ export class WorkerPool {
    * @param taskName - タスク名
    * @param payload - タスクペイロード
    */
-  private async processTask(taskName: string, payload: TaskPayload): Promise<void> {
+  private async processTask(taskName: string, payload: TaskPayload) {
     const taskId = payload.id;
 
     // タスク処理中にマーク
     this.activeTaskCount++;
     this.processingTasks.add(taskId);
 
+    this.logger.debug(`Processing task ${taskId} of type ${taskName}`);
     try {
-      this.logger.debug(`Processing task ${taskId} of type ${taskName}`);
-
       // タスク実行
-      const result = await this.taskHandlerFn(payload);
+      const r = await this.taskHandlerFn(payload);
 
-      // 結果をバックエンドに保存
-      await this.backend.storeResult(taskId, result, payload.options?.resultExpires);
+      this.logger.debug(`Task ${taskName} ${taskId} completed successfully with result=${JSON.stringify(r)}`);
+      this.backend.storeResult(payload.id, {status: 'success', value: r}, payload.options?.resultExpires);
+    } catch (err) {
+      this.logger.error(`Task ${taskId} failed:`, err);
 
-      // taskExecutedイベントを発行して処理完了を通知
-      // 他のシステムが処理結果を監視できるようにする
-      const broker = this.broker as any;
-      if (broker.getMessageQueue) {
-        broker.getMessageQueue().emit('taskExecuted', {
-          taskId,
-          taskName,
-          status: 'SUCCESS',
-          result,
-        });
-      }
-
-      this.logger.debug(`Task ${taskId} completed successfully`);
-    } catch (error) {
-      this.logger.error(`Task ${taskId} failed:`, error);
-
-      // エラー通知をemitして他のシステムにも通知
-      const broker = this.broker as any;
-      if (broker.getMessageQueue) {
-        broker.getMessageQueue().emit('taskExecuted', {
-          taskId,
-          taskName,
-          status: 'FAILURE',
-          error,
-        });
-      }
-
-      throw error;
+      this.backend.storeResult(
+        payload.id,
+        {status: 'failure', error: err instanceof Error ? err : new Error(String(err))},
+        payload.options?.resultExpires,
+      );
     } finally {
       // タスク完了
       this.activeTaskCount--;
@@ -319,12 +256,9 @@ export class WorkerPool {
     this.logger.info(`Cancelling ${this.consumerTags.size} consumers`);
 
     const results = await Promise.allSettled(
-      Array.from(this.consumerTags.entries()).map(([workerId, tag]) => {
-        return this.cancelSingleConsumer(tag).then(
-          () => this.logger.info(`Successfully cancelled consumer ${workerId}`),
-          (reason) => this.logger.warn(`Failed to cancel consumer ${workerId}: ${reason}`),
-        );
-      }),
+      Array.from(this.consumerTags.values()).map((tag) =>
+        this.cancelSingleConsumer(tag).catch(() => this.logger.error(`Failed to cancel consumer ${tag}`)),
+      ),
     );
 
     const failedCount = results.filter((r) => r.status === 'rejected').length;
@@ -379,9 +313,9 @@ export class WorkerPool {
    */
   private resetPool(): void {
     this.workerPromises = [];
-    this.consumerTags.clear();
+    this.consumerTags = new Set();
     this.activeTaskCount = 0;
-    this.taskQueue = [];
+    this.taskQueue = new Queue();
     this.processingTasks.clear();
   }
 }

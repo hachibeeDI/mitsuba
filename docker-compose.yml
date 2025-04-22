@@ -1,0 +1,53 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"  # AMQP protocol port
+      - "15672:15672"  # Management UI port
+      - "15692:15692"  # Prometheus metrics port
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+      - RABBITMQ_PLUGINS=rabbitmq_prometheus
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: >
+      bash -c "rabbitmq-plugins enable rabbitmq_prometheus && rabbitmq-server"
+
+  # E2Eテスト用ワーカープロセス
+  worker:
+    build:
+      context: .
+      dockerfile: src/tests/e2e/workers/Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+      - WORKER_ID=worker-1
+      - CONCURRENCY=3
+      - APP_NAME=e2e-test-worker
+    restart: unless-stopped
+
+  # 複数ワーカーテスト用
+  worker-2:
+    build:
+      context: .
+      dockerfile: src/tests/e2e/workers/Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+      - WORKER_ID=worker-2
+      - CONCURRENCY=2
+      - APP_NAME=e2e-test-worker
+    restart: unless-stopped
+
+volumes:
+  rabbitmq_data: 

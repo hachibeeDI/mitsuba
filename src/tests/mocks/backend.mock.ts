@@ -2,16 +2,14 @@
  * バックエンドのモック実装
  */
 import {EventEmitter} from 'node:events';
-import type {Backend, TaskId} from '../../types';
-import {TaskRetrievalError} from '../../errors';
+import type {Backend, TaskId, TaskResult} from '../../types';
+import {TaskRetrievalError, TaskTimeoutError} from '../../errors';
+import {pooling} from '../../helpers';
 
-interface StoredResult {
-  result: unknown;
-  expireAt?: number;
-}
+type StoredResult<T> = TaskResult<T> & {expiresAt?: number};
 
 export class MockBackend implements Backend {
-  private results = new Map<TaskId, StoredResult>();
+  private results = new Map<TaskId, StoredResult<unknown>>();
   private connected = false;
   private shouldFailStore = false;
   private shouldFailRetrieve = false;
@@ -32,18 +30,8 @@ export class MockBackend implements Backend {
     await Promise.resolve();
     this.connected = true;
 
-    // タスク処理結果をリッスン
-    this.messageQueue.on('taskResult', (data: {taskId: TaskId; result: unknown}) => {
-      if (data?.taskId) {
-        this.setResult(data.taskId, data.result);
-      }
-    });
-
-    // タスク実行結果をリッスン
-    this.messageQueue.on('taskExecuted', (data: {taskId: TaskId; status: string; result?: unknown; error?: unknown}) => {
-      if (data?.taskId && data.status === 'SUCCESS' && data.result !== undefined) {
-        this.setResult(data.taskId, data.result);
-      }
+    this.messageQueue.on('taskResult', (data: {taskId: TaskId; result: StoredResult<unknown>}) => {
+      this.results.set(data.taskId, data.result);
     });
   }
 
@@ -55,10 +43,9 @@ export class MockBackend implements Backend {
 
     // イベントリスナーを削除
     this.messageQueue.removeAllListeners('taskResult');
-    this.messageQueue.removeAllListeners('taskExecuted');
   }
 
-  async storeResult(taskId: TaskId, result: unknown, ttl?: number): Promise<void> {
+  async storeResult(taskId: TaskId, result: TaskResult<unknown>, expiresIn?: number): Promise<void> {
     // Wait a tick to simulate async behavior
     await Promise.resolve();
 
@@ -70,90 +57,108 @@ export class MockBackend implements Backend {
       throw new Error('Failed to store result');
     }
 
-    const stored: StoredResult = {
-      result,
-    };
+    const toStore: StoredResult<unknown> = expiresIn ? {...result, expiresAt: Date.now() + expiresIn * 1000} : result;
 
-    if (ttl) {
-      stored.expireAt = Date.now() + ttl * 1000;
-    }
-
-    this.results.set(taskId, stored);
-
-    // 結果をメッセージキューに発行
+    this.results.set(taskId, toStore);
     this.messageQueue.emit('taskResult', {taskId, result});
   }
 
-  async getResult<T>(taskId: TaskId, timeout = 5000): Promise<T> {
-    // Wait a tick to simulate async behavior
-    await Promise.resolve();
-
+  async startConsume<T>(taskId: TaskId, cb: (r: TaskResult<T>) => void): Promise<void> {
     if (!this.connected) {
-      throw new Error('Backend is not connected');
+      cb({
+        status: 'failure',
+        error: new Error('Backend is not connected'),
+      });
+      return;
     }
 
     if (this.shouldFailRetrieve) {
-      throw new TaskRetrievalError(taskId);
+      cb({
+        status: 'failure',
+        error: new TaskRetrievalError(taskId),
+      });
+      return;
     }
 
-    // Check if result is already available
-    const checkResult = (): StoredResult | undefined => {
+    const checkResult = (): StoredResult<T> | undefined => {
       const storedResult = this.results.get(taskId);
 
       // TTLが設定されていて期限切れの場合はnullを返す
-      if (storedResult?.expireAt && storedResult.expireAt < Date.now()) {
+      if (storedResult?.expiresAt && storedResult.expiresAt < Date.now()) {
         this.results.delete(taskId);
         return undefined;
       }
 
-      return storedResult;
+      return storedResult as StoredResult<T>;
     };
 
-    // Initial check
     const initialResult = checkResult();
     if (initialResult) {
-      return initialResult.result as T;
+      console.log('initial check passed', initialResult);
+      cb(initialResult as TaskResult<T>);
+      return;
     }
 
-    // Wait for result if not immediately available
-    return new Promise<T>((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        cleanup();
-        reject(new TaskRetrievalError(taskId));
-      }, timeout);
-
-      const handleTaskResult = (data: {taskId: TaskId; result: unknown}) => {
-        if (data.taskId === taskId) {
-          const result = checkResult();
-          if (result) {
-            cleanup();
-            resolve(result.result as T);
-          }
+    const timeout = 100;
+    const interval = Math.max(1, timeout / 50);
+    pooling(
+      () => {
+        const r = checkResult();
+        if (r == null) {
+          return {continue: true};
         }
-      };
+        return {continue: false, v: r};
+      },
+      {interval, maxRetry: Math.min(timeout, 50)},
+    )
+      .then(cb)
+      .catch((_err) => ({status: 'failure', error: new TaskTimeoutError(taskId, timeout)}));
+  }
 
-      const handleTaskExecuted = (data: {taskId: TaskId; status: string; result?: unknown}) => {
-        if (data.taskId === taskId && data.status === 'SUCCESS') {
-          const result = checkResult();
-          if (result) {
-            cleanup();
-            resolve(result.result as T);
-          }
+  async getResult<T>(taskId: TaskId, timeout = 5000): Promise<TaskResult<T>> {
+    if (!this.connected) {
+      return {
+        status: 'failure',
+        error: new Error('Backend is not connected'),
+      };
+    }
+
+    if (this.shouldFailRetrieve) {
+      return {
+        status: 'failure',
+        error: new TaskRetrievalError(taskId),
+      };
+    }
+
+    const checkResult = (): StoredResult<T> | undefined => {
+      const storedResult = this.results.get(taskId);
+
+      // TTLが設定されていて期限切れの場合はnullを返す
+      if (storedResult?.expiresAt && storedResult.expiresAt < Date.now()) {
+        this.results.delete(taskId);
+        return undefined;
+      }
+
+      return storedResult as StoredResult<T>;
+    };
+
+    const initialResult = checkResult();
+    if (initialResult) {
+      console.log('initial check passed', initialResult);
+      return initialResult as TaskResult<T>;
+    }
+
+    const interval = Math.max(1, timeout / 50);
+    return pooling(
+      () => {
+        const r = checkResult();
+        if (r == null) {
+          return {continue: true};
         }
-      };
-
-      const cleanup = () => {
-        if (this.results.has(taskId)) {
-          this.results.delete(taskId);
-        }
-        clearTimeout(timeoutId);
-        this.messageQueue.removeListener('taskResult', handleTaskResult);
-        this.messageQueue.removeListener('taskExecuted', handleTaskExecuted);
-      };
-
-      this.messageQueue.on('taskResult', handleTaskResult);
-      this.messageQueue.on('taskExecuted', handleTaskExecuted);
-    });
+        return {continue: false, v: r};
+      },
+      {interval, maxRetry: Math.min(timeout, 50)},
+    ).catch((_err) => ({status: 'failure', error: new TaskTimeoutError(taskId, timeout)}));
   }
 
   // モックテスト用のヘルパーメソッド
@@ -167,15 +172,6 @@ export class MockBackend implements Backend {
 
   isConnected(): boolean {
     return this.connected;
-  }
-
-  // 特定のタスクの結果を直接設定（テスト用）
-  setResult(taskId: TaskId, result: unknown, expiresIn = 3600): void {
-    const expires = Date.now() + expiresIn * 1000;
-    this.results.set(taskId, {
-      result,
-      expireAt: expires,
-    });
   }
 
   // テスト用：結果保存の失敗をシミュレートするための設定

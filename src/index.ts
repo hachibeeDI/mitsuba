@@ -2,79 +2,121 @@
  * Mitsuba コアクラス
  * 分散タスク処理システムのメインエントリポイント
  */
-import type {
-  MitsubaOptions,
-  Broker,
-  Backend,
-  TaskRegistry,
-  AsyncTask,
-  TaskOptions,
-  TaskStatus,
-  TaskPayload,
-  CreatedTask,
-  TaskId,
+import {
+  type MitsubaOptions,
+  type Broker,
+  type Backend,
+  type TaskRegistry,
+  type AsyncTask,
+  type TaskOptions,
+  type TaskStatus,
+  type TaskPayload,
+  type CreatedTask,
+  type TaskId,
+  type TaskResult,
+  unwrapResult,
 } from './types';
 import {AMQPBroker} from './brokers/amqp';
 import {AMQPBackend} from './backends/amqp';
 import {WorkerPool} from './worker';
-import {getLogger} from './logger';
+import {getLogger, type Logger} from './logger';
+import {generateTaskId} from './utils';
+import EventEmitter from 'node:events';
 
 /**
  * Publisher側で使用するAsyncTask実装
  */
 class TaskPromiseWrapper<T> implements AsyncTask<T> {
-  private readonly publishResult: Promise<TaskId>;
+  public readonly taskId: TaskId;
   private readonly backend: Backend;
-  private readonly taskExecutionPromise: Promise<T>;
-  public status: TaskStatus = 'PENDING';
-  public result: T | null = null;
+  private readonly publisher: () => Promise<unknown>;
+  private readonly ev: EventEmitter;
+  private _status: TaskStatus = 'PENDING';
+  private _result: TaskResult<T> | null = null;
 
-  constructor(publishResult: Promise<TaskId>, backend: Backend) {
-    this.publishResult = publishResult;
+  constructor(taskId: TaskId, backend: Backend, publisher: () => Promise<unknown>) {
+    this.taskId = taskId;
     this.backend = backend;
+    this.publisher = publisher;
 
-    this.taskExecutionPromise = this.pollForResult();
+    this.ev = new EventEmitter();
+    this.ev.once('done', (t: TaskResult<T>) => {
+      this._status = t.status === 'success' ? 'SUCCESS' : 'FAILURE';
+      this._result = t;
+    });
+
+    this.backend.startConsume(taskId, (r) => this.ev.emit('done', r)).then(() => this.publisher());
   }
 
-  /**
-   * 結果が利用可能になるまでポーリングする
-   * @private
-   */
-  private async pollForResult(): Promise<T> {
-    // タスクIDを取得し、バックエンドとの通信に使用
-    const taskId = await this.publishResult;
-    this.status = 'STARTED';
+  /** */
+  // private async startTask(): Promise<TaskResult<T>> {
+  //   this._status = 'STARTED';
 
-    const checkResult = async (): Promise<T> => {
-      try {
-        // バックエンドから結果を取得（taskIdを使用）
-        this.status = 'SUCCESS';
-        return await this.backend.getResult<T>(taskId);
-      } catch (error) {
-        this.status = 'FAILURE';
-        throw error;
-      }
-    };
+  //   try {
+  //     // consumer first
+  //     const resultConsumer = this.backend.getResult<T>(this.taskId);
+  //     // then publish
+  //     await this.publisher();
 
-    // 結果を取得するためのポーリングを開始
-    return checkResult();
+  //     const result = await resultConsumer;
+  //     this._result = result;
+  //     this._status = result.status === 'success' ? 'SUCCESS' : 'FAILURE';
+  //     return result;
+  //   } catch (error) {
+  //     this._status = 'FAILURE';
+  //     return {
+  //       status: 'failure',
+  //       error: error instanceof Error ? error : new Error(String(error)),
+  //     };
+  //   }
+  // }
+
+  getStatus(): TaskStatus {
+    return this._status;
   }
 
-  getTaskId(): Promise<TaskId> {
-    return this.publishResult;
-  }
-
-  async get(): Promise<T> {
-    if (this.status === 'SUCCESS' && this.result) {
-      return this.result;
+  async getResult(): Promise<TaskResult<T>> {
+    if (this._result) {
+      return this._result;
     }
 
-    this.result = await this.taskExecutionPromise;
-    return this.result;
+    return new Promise((resolve) => {
+      this.ev.once('done', (t: TaskResult<T>) => {
+        this._status = t.status === 'success' ? 'SUCCESS' : 'FAILURE';
+        this._result = t;
+        resolve(t);
+      });
+    });
+  }
+  get() {
+    return unwrapResult(this.getResult());
   }
 
-  retry(): never {
-    this.status = 'RETRY';
+  async waitUntilComplete(options?: {pollInterval?: number; timeout?: number}): Promise<TaskResult<T>> {
+    const pollInterval = options?.pollInterval || 1000;
+    const timeout = options?.timeout || 30000;
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeout) {
+      const status = await this.getStatus();
+      if (status === 'SUCCESS' || status === 'FAILURE') {
+        return this.getResult();
+      }
+
+      // 指定された間隔で待機
+      await new Promise((resolve) => setTimeout(resolve, pollInterval));
+    }
+
+    // タイムアウト時にはエラーを返す
+    this._status = 'FAILURE';
+    return {
+      status: 'failure',
+      error: new Error(`Task execution timed out after ${timeout}ms`),
+    };
+  }
+
+  retry(): AsyncTask<T> {
+    this._status = 'RETRY';
     throw new Error('Cannot retry task before it has been published');
   }
 }
@@ -86,7 +128,7 @@ export class Mitsuba {
   private broker: Broker;
   private backend: Backend;
   private workerPool: WorkerPool | null = null;
-  private readonly logger = getLogger();
+  private readonly logger: Logger;
   public readonly name: string;
 
   /**
@@ -97,6 +139,10 @@ export class Mitsuba {
     this.name = name;
     this.broker = this.createBroker(options.broker);
     this.backend = this.createBackend(options.backend);
+    this.logger = getLogger();
+    if (options.logger?.level) {
+      this.logger.setLevel(options.logger.level);
+    }
   }
 
   /**
@@ -110,7 +156,7 @@ export class Mitsuba {
     }
 
     if (broker.startsWith('amqp://')) {
-      return new AMQPBroker({url: broker});
+      return new AMQPBroker(this.name, broker);
     }
 
     throw new Error(`Unsupported broker protocol: ${broker}`);
@@ -127,7 +173,7 @@ export class Mitsuba {
     }
 
     if (backend.startsWith('amqp://')) {
-      return new AMQPBackend(backend);
+      return new AMQPBackend(backend, this.name);
     }
 
     throw new Error(`Unsupported backend protocol: ${backend}`);
@@ -137,8 +183,7 @@ export class Mitsuba {
    * Mitsubaを初期化
    */
   async init(): Promise<void> {
-    await this.broker.connect();
-    await this.backend.connect();
+    await Promise.all([this.broker.connect(), this.backend.connect()]);
     this.logger.info(`Mitsuba initialized: ${this.name}`);
   }
 
@@ -151,8 +196,7 @@ export class Mitsuba {
       this.workerPool = null;
     }
 
-    await this.broker.disconnect();
-    await this.backend.disconnect();
+    await Promise.all([this.broker.disconnect(), this.backend.disconnect()]);
     this.logger.info(`Mitsuba closed: ${this.name}`);
   }
 
@@ -178,18 +222,20 @@ export class Mitsuba {
       if (typeof task === 'function') {
         // can't be typesafe
         (tasks as any)[taskName] = (...args: ReadonlyArray<unknown>) => {
-          return new TaskPromiseWrapper(this.broker.publishTask(taskName, args, undefined), this.backend);
+          const taskId = generateTaskId();
+          return new TaskPromiseWrapper(taskId, this.backend, () => this.broker.publishTask(taskId, taskName, args, undefined));
         };
       } else {
         const taskObj = task as {opts?: TaskOptions; call: (...args: ReadonlyArray<unknown>) => unknown};
         // can't be typesafe
         (tasks as any)[taskName as keyof T] = (...args: ReadonlyArray<unknown>) => {
-          return new TaskPromiseWrapper(this.broker.publishTask(taskName, args, taskObj.opts), this.backend);
+          const taskId = generateTaskId();
+          return new TaskPromiseWrapper(taskId, this.backend, () => this.broker.publishTask(taskId, taskName, args, taskObj.opts));
         };
       }
     }
 
-    const taskHandler = async (payload: TaskPayload): Promise<unknown> => {
+    const taskHandler = (payload: TaskPayload): Promise<unknown> => {
       const {taskName, args} = payload;
       const taskDef = registry[taskName as keyof T];
 
@@ -198,22 +244,32 @@ export class Mitsuba {
       }
 
       if (typeof taskDef === 'function') {
-        return await Promise.resolve(taskDef(...args));
+        return taskDef(...args);
       }
 
-      return await Promise.resolve(taskDef.call(...args));
+      return taskDef.call(...args);
     };
 
     return {
       tasks,
       worker: {
         start: async (concurrency = 1): Promise<void> => {
-          // 既存のworkerPoolを使用するか、新しく作成する
-          if (!this.workerPool) {
+          if (this.workerPool) {
+            switch (this.workerPool.getState()) {
+              case 'RUNNING':
+                return;
+              case 'ERROR':
+              case 'STOPPED':
+              case 'IDLE':
+                await this.workerPool.stop().catch(() => ({}));
+                this.workerPool = new WorkerPool(this.broker, this.backend, taskHandler);
+            }
+          } else {
             this.workerPool = new WorkerPool(this.broker, this.backend, taskHandler);
           }
           return await this.workerPool.start(registeredTaskNames, concurrency);
         },
+
         stop: async (): Promise<void> => {
           if (this.workerPool) {
             await this.workerPool.stop();
@@ -223,27 +279,6 @@ export class Mitsuba {
         },
       },
     };
-  }
-
-  /**
-   * ワーカープールを開始
-   * @param taskNames - 処理対象のタスク名配列
-   * @param concurrency - 並行処理数
-   */
-  async startWorker(taskNames: ReadonlyArray<string> = [], concurrency = 1): Promise<void> {
-    // ワーカープールがなければ作成
-    if (!this.workerPool) {
-      // 実際の実装はここで拡張する
-      this.logger.info(`Starting worker: ${this.name} with concurrency ${concurrency}`);
-
-      // タスク名がなければログ出力
-      if (taskNames.length === 0) {
-        this.logger.warn('No task names provided, worker will not consume any messages');
-      }
-
-      // 実際のワーカープール実装を作成するコードをここに追加
-      await Promise.resolve(); // 非同期処理の一例
-    }
   }
 }
 

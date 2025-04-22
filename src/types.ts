@@ -3,6 +3,8 @@
  * 分散タスク処理システムの基本的な型を定義
  */
 
+import type {LogLevel} from './logger';
+
 export type Branded<T, Brand> = T & {readonly __brand: Brand};
 
 /** タスクの実行オプション */
@@ -27,16 +29,30 @@ export type TaskStatus = 'PENDING' | 'STARTED' | 'SUCCESS' | 'FAILURE' | 'RETRY'
 export type TaskId = Branded<string, '--task-id--'>;
 
 /**
+ * タスク結果か失敗を表す型
+ */
+export type TaskResult<T> = {status: 'success'; value: T} | {status: 'failure'; error: Error; retryCount?: undefined | number};
+
+export function unwrapResult<T>(a: Promise<TaskResult<T>>): Promise<T> {
+  return a.then((x) => {
+    if (x.status === 'success') {
+      return x.value;
+    }
+    throw x.error;
+  });
+}
+
+/**
  * 非同期タスクインターフェース
  * タスク実行の状態管理と結果取得を行う
  */
 export interface AsyncTask<T> {
-  getTaskId(): Promise<TaskId>;
-  /** タスク結果を取得 */
+  taskId: TaskId;
+  /** タスク結果を取得 (成功時は値、失敗時はエラー情報を含む) */
   get(): Promise<T>;
-  status: TaskStatus;
-  /** エラー時の再試行 */
-  retry(options?: ErrorOptions): never;
+  getResult(): Promise<TaskResult<T>>;
+  getStatus(): TaskStatus;
+  retry(): AsyncTask<T>;
 }
 
 export type TaskFunc<Args extends ReadonlyArray<unknown>, R> = {
@@ -79,7 +95,7 @@ export type TaskHandlerResult =
 export type Broker = {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
-  publishTask(taskName: string, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId>;
+  publishTask(taskId: TaskId, taskName: string, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId>;
   consumeTask(queueName: string, handler: (task: TaskPayload) => Promise<TaskHandlerResult>): Promise<string>;
   cancelConsumer(consumerTag: string): Promise<void>;
 };
@@ -91,8 +107,19 @@ export type Broker = {
 export type Backend = {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
-  storeResult(taskId: TaskId, result: unknown, expiresIn?: number): Promise<void>;
-  getResult<T>(taskId: TaskId): Promise<T>;
+  /**
+   * Store a result of the task by worker.
+   * @param taskId
+   * @param result
+   * @param expiresIn
+   */
+  storeResult(taskId: TaskId, result: TaskResult<unknown>, expiresIn?: number): Promise<void>;
+  /**
+   * Read a result by producer
+   * @param taskId
+   */
+  getResult<T>(taskId: TaskId): Promise<TaskResult<T>>;
+  startConsume<T>(taskId: TaskId, cb: (r: TaskResult<T>) => void): Promise<void>;
 };
 
 /** ワーカープールの状態 */
@@ -129,7 +156,7 @@ export type MitsubaOptions = {
   /** グレースフルシャットダウン時のタイムアウト（ミリ秒単位） */
   gracefulShutdownTimeout?: number;
   logger?: {
-    level?: 'debug' | 'info' | 'warn' | 'error';
+    level?: LogLevel;
     customLogger?: Logger;
   };
 };

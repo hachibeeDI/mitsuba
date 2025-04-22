@@ -35,9 +35,22 @@
     "build:cjs": "tsc -p tsconfig.cjs.json",
     "build:esm": "tsc -p tsconfig.mjs.json",
     "prepublish": "npm run build",
+    "e2e:setup": "docker compose up -d rabbitmq worker worker-2",
+    "e2e:status": "docker compose ps",
+    "e2e:logs": "docker compose logs",
+    "e2e:logs:worker": "docker compose logs worker",
+    "e2e:logs:rabbitmq": "docker compose logs rabbitmq",
+    "e2e:stop": "docker compose stop",
+    "e2e:clean": "docker compose down -v",
+    "e2e:rebuild": "docker compose build worker worker-2",
+    "e2e:run": "npm run e2e:setup && echo \"Waiting for services to start...\" && sleep 10",
+    "pretest": "npm run e2e:run && npm run test:e2e && npm run e2e:clean",
     "test": "vitest run",
+    "test:unit": "vitest run src/tests/unit",
+    "test:integration": "vitest run src/tests/integration",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "npm run e2e:run && vitest run src/tests/e2e"
   },
   "keywords": [
     "celery",
@@ -56,11 +69,20 @@
     "@types/uuid": "^10.0.0",
     "@vitest/coverage-v8": "^3.1.1",
     "fp-ts": "^2.16.9",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
     "typescript": "^5.8.3",
     "vitest": "^3.1.1"
   },
   "dependencies": {
     "amqplib": "^0.10.7",
     "uuid": "^11.1.0"
+  },
+  "ts-node": {
+    "esm": true,
+    "project": "tsconfig.mjs.json",
+    "require": [
+      "tsconfig-paths/register"
+    ]
   }
 }

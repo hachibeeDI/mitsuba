@@ -47,7 +47,7 @@ export class DefaultLogger implements Logger {
   private level: LogLevel;
 
   constructor(options?: LoggerOptions) {
-    this.level = options?.level ?? LogLevel.INFO;
+    this.level = options?.level ?? LogLevel.DEBUG;
   }
 
   debug(message: string, ...args: Array<any>): void {

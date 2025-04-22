@@ -7,11 +7,9 @@ import {connect} from 'amqplib';
 import type {Broker, TaskId, TaskOptions, TaskPayload, TaskHandlerResult} from '../types';
 import {BrokerConnectionError, BrokerError} from '../errors';
 import {getLogger} from '../logger';
-import {generateTaskId} from '../utils';
+import {jsonSafeParse} from '../helpers';
 
 export type AMQPBrokerOptions = {
-  /** AMQPサーバーURI */
-  url?: string;
   /** 接続オプション */
   connectionOptions?: Options.Connect;
   /** キュー設定オプション */
@@ -23,12 +21,12 @@ export type AMQPBrokerOptions = {
 };
 
 export class AMQPBroker implements Broker {
-  /** AMQPコネクション */
   private connection: ChannelModel | null = null;
-  /** AMQPチャネル */
   private channel: Channel | null = null;
-  /** ブローカーURL */
+
   private readonly url: string;
+  private projectName: string;
+
   /** コンシューマータグマップ */
   private consumers = new Map<string, Replies.Consume>();
   private readonly connectionOptions: Options.Connect;
@@ -41,8 +39,9 @@ export class AMQPBroker implements Broker {
    * AMQPブローカーを初期化
    * @param options - AMQPブローカーのオプション
    */
-  constructor(options: AMQPBrokerOptions = {}) {
-    this.url = options.url ?? 'amqp://localhost';
+  constructor(projectName: string, url: string, options: AMQPBrokerOptions = {}) {
+    this.projectName = projectName;
+    this.url = url;
     this.connectionOptions = options.connectionOptions ?? {};
     this.queueOptions = {
       durable: true,
@@ -140,27 +139,18 @@ export class AMQPBroker implements Broker {
    * @returns タスクID
    * @throws ブローカーに接続していない場合
    */
-  async publishTask(taskName: string, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId> {
+  async publishTask(taskId: TaskId, taskName: string, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId> {
     await this.ensureConnection();
-
-    const taskId = generateTaskId();
-
-    // Create a task payload with properly typed options
-    // When options is undefined, we don't include it in the payload at all
-    const payload: TaskPayload = options ? {id: taskId, taskName, args, options} : {id: taskId, taskName, args};
-
     if (!this.channel) {
       throw new BrokerConnectionError('Channel is not connected');
     }
 
-    // キューの確保
-    await this.channel.assertQueue(taskName, this.queueOptions);
+    const payload: TaskPayload = options ? {id: taskId, taskName, args, options} : {id: taskId, taskName, args};
 
-    // メッセージの発行
-    const priority = options?.priority ?? 0;
-    const success = this.channel.sendToQueue(taskName, Buffer.from(JSON.stringify(payload)), {
+    await this.channel.assertQueue(`${this.projectName}.${taskName}`, this.queueOptions);
+    const success = this.channel.sendToQueue(`${this.projectName}.${taskName}`, Buffer.from(JSON.stringify(payload)), {
       ...this.messageOptions,
-      priority,
+      priority: options?.priority ?? 0,
       messageId: taskId,
     });
 
@@ -174,12 +164,12 @@ export class AMQPBroker implements Broker {
 
   /**
    * ブローカーからタスクを消費
-   * @param queueName - キュー名
+   * @param taskName - キュー名
    * @param handler - タスク処理ハンドラー
    * @returns コンシューマータグ
    * @throws ブローカーに接続していない場合
    */
-  async consumeTask(queueName: string, handler: (task: TaskPayload) => Promise<TaskHandlerResult>): Promise<string> {
+  async consumeTask(taskName: string, handler: (task: TaskPayload) => Promise<TaskHandlerResult>): Promise<string> {
     await this.ensureConnection();
 
     if (!this.channel) {
@@ -187,66 +177,62 @@ export class AMQPBroker implements Broker {
     }
 
     // キューの確保
-    await this.channel.assertQueue(queueName, this.queueOptions);
+    await this.channel.assertQueue(`${this.projectName}.${taskName}`, this.queueOptions);
 
+    this.logger.debug(`setting up task consumer for="${taskName}"`);
     // コンシューマーを設定
     const consumeReply = await this.channel.consume(
-      queueName,
+      `${this.projectName}.${taskName}`,
       async (msg) => {
+        this.logger.info(`Start consuming ${this.projectName}.${taskName}`);
         if (!msg) {
-          this.logger.warn(`Received null message from queue ${queueName}`);
+          this.logger.warn(`Received null message from queue ${taskName}`);
           return; // キャンセル通知の場合はスキップ
         }
 
+        // メッセージをJSONとしてパース
+        const content = jsonSafeParse(msg.content.toString());
+
+        if (content.kind === 'failure') {
+          this.logger.error('Failed to parse JSON');
+          this.channel?.nack(msg, false, false);
+          return;
+        }
+        this.logger.info(`Start consuming ${this.projectName}.${taskName} with message=${JSON.stringify(content.value)}`);
+        if (this.isTaskPayload(content.value) === false) {
+          this.logger.error(`Invalid task payload received from queue ${taskName}`);
+          this.channel?.nack(msg, false, false);
+          return;
+        }
+
         try {
-          // メッセージをJSONとしてパース
-          const content = JSON.parse(msg.content.toString());
-
-          // 型ガードを使用して安全にキャストする
-          if (!this.isTaskPayload(content)) {
-            this.logger.error(`Invalid task payload received from queue ${queueName}`);
-            if (this.channel) {
-              this.channel.nack(msg, false, false);
-            }
-            return;
-          }
-
-          // ハンドラーを呼び出し
-          const handlerResult = await handler(content);
-
-          // ハンドラーの結果に基づいて適切に応答
+          // FIXME: accepted しか返してない。クソ
+          const handlerResult = await handler(content.value);
+          this.logger.debug(`Task handled result="${JSON.stringify(handlerResult)}"`);
           if (handlerResult.status === 'rejected') {
             this.logger.warn(`Task rejected: ${handlerResult.reason}`);
             // タスク拒否の場合は再キューしない
-            if (this.channel) {
-              this.channel.nack(msg, false, false);
-            }
+            this.channel?.nack(msg, false, false);
             return;
           }
-
-          // 正常処理完了後ACK
-          if (this.channel) {
-            this.channel.ack(msg);
-          }
+          this.channel?.ack(msg);
         } catch (error) {
           this.logger.error('Error processing task:', error);
 
           // 処理エラー時は再キューイング
           // メッセージヘッダーで再試行回数を追跡可能
-          if (this.channel) {
-            this.channel.nack(msg, false, false);
-          }
+          this.channel?.nack(msg, false, false);
         }
       },
       {noAck: false},
     );
 
     if (!consumeReply || !consumeReply.consumerTag) {
-      throw new Error(`Failed to consume from queue: ${queueName}`);
+      throw new Error(`Failed to consume from queue: ${taskName}`);
     }
 
-    this.consumers.set(queueName, consumeReply);
-    this.logger.debug(`Started consuming from queue ${queueName} with consumer tag ${consumeReply.consumerTag}`);
+    this.consumers.set(taskName, consumeReply);
+    this.logger.debug(`Started consuming from queue ${taskName} with consumer tag ${consumeReply.consumerTag}`);
     return consumeReply.consumerTag;
   }
 
