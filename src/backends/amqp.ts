@@ -104,14 +104,11 @@ export class AMQPBackend implements Backend {
       expires: Date.now() + expiresIn * 1000,
     } satisfies ChannelPayload;
 
-    const success = this.channel.publish(
-      this.projectName,
-      taskId,
-      Buffer.from(JSON.stringify(payload)),
-      {
-        expiration: String(expiresIn * 1000),
-      },
-    );
+    const success = this.channel.publish(this.projectName, taskId, Buffer.from(JSON.stringify(payload)), {
+      expiration: String(expiresIn * 1000),
+      contentType: 'application/json',
+      contentEncoding: 'utf-8',
+    });
 
     if (!success) {
       throw new Error(`Failed to publish result for task: ${taskId}`);
@@ -146,11 +143,9 @@ export class AMQPBackend implements Backend {
           });
         }
 
-        this.channel
-          ?.unbindQueue(queue, this.projectName, taskId)
-          ?.catch((err) => {
-            this.logger.error('Error unbinding queue:', err);
-          });
+        this.channel?.unbindQueue(queue, this.projectName, taskId)?.catch((err) => {
+          this.logger.error('Error unbinding queue:', err);
+        });
       };
 
       const timeout = setTimeout(() => {

@@ -8,7 +8,7 @@ import type {Broker, TaskId, TaskOptions, TaskPayload, TaskHandlerResult} from '
 import {BrokerConnectionError, BrokerError} from '../errors';
 import {getLogger} from '../logger';
 import {generateTaskId} from '../utils';
-import { jsonSafeParse } from '../helpers';
+import {jsonSafeParse} from '../helpers';
 
 export type AMQPBrokerOptions = {
   /** 接続オプション */
@@ -195,20 +195,20 @@ export class AMQPBroker implements Broker {
           return; // キャンセル通知の場合はスキップ
         }
 
-          // メッセージをJSONとしてパース
-          const content = jsonSafeParse(msg.content.toString());
+        // メッセージをJSONとしてパース
+        const content = jsonSafeParse(msg.content.toString());
 
-          if (content.kind === 'failure') {
-            this.logger.error('Failed to parse JSON');
-            this.channel?.nack(msg, false, false);
-            return;
-          }
-          this.logger.debug(`Start consuming ${this.projectName}.${taskName} with message=${content.value}`);
-          if (this.isTaskPayload(content.value) === false) {
-            this.logger.error(`Invalid task payload received from queue ${taskName}`);
-            this.channel?.nack(msg, false, false);
-            return;
-          }
+        if (content.kind === 'failure') {
+          this.logger.error('Failed to parse JSON');
+          this.channel?.nack(msg, false, false);
+          return;
+        }
+        this.logger.debug(`Start consuming ${this.projectName}.${taskName} with message=${content.value}`);
+        if (this.isTaskPayload(content.value) === false) {
+          this.logger.error(`Invalid task payload received from queue ${taskName}`);
+          this.channel?.nack(msg, false, false);
+          return;
+        }
 
         try {
           // FIXME: accepted しか返してない。クソ
