@@ -37,7 +37,7 @@ describe('Mitsuba E2Eテスト', () => {
     const task = tasks.addTask(5, 7);
     console.log('Task execed', task);
 
-    const result = await task.getResult();
+    const result = await task.get();
     console.log('result receivedd', result);
 
     expect(result).toBe(12);
@@ -47,7 +47,7 @@ describe('Mitsuba E2Eテスト', () => {
   test('複数タスクの並列実行 (E2E)', async () => {
     // 両方のタスクを同時に実行
     const startTime = performance.now();
-    const [resultA, resultB] = await Promise.all([tasks.taskA(7).getResult(), tasks.taskB(5).getResult()]);
+    const [resultA, resultB] = await Promise.all([tasks.taskA(7).get(), tasks.taskB(5).get()]);
     const endTime = performance.now();
 
     // 結果確認
@@ -82,7 +82,7 @@ describe('Mitsuba E2Eテスト', () => {
   test('大量のタスク同時実行 (E2E)', async () => {
     // 20個のタスクを同時に実行
     const taskCount = 20;
-    const taskPromises = Array.from({length: taskCount}, (_, i) => tasks.incrementTask(i).getResult());
+    const taskPromises = Array.from({length: taskCount}, (_, i) => tasks.incrementTask(i).get());
 
     // すべてのタスク結果を待機
     const results = await Promise.all(taskPromises);

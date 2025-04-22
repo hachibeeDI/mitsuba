@@ -27,7 +27,7 @@ import {getLogger} from './logger';
 class TaskPromiseWrapper<T> implements AsyncTask<T> {
   private readonly publishResult: Promise<TaskId>;
   private readonly backend: Backend;
-  private readonly taskExecutionPromise: Promise<TaskResult<T>>;
+  private readonly taskExecution: Promise<TaskResult<T>>;
   private _status: TaskStatus = 'PENDING';
   private _result: TaskResult<T> | null = null;
 
@@ -35,7 +35,7 @@ class TaskPromiseWrapper<T> implements AsyncTask<T> {
     this.publishResult = publishResult;
     this.backend = backend;
 
-    this.taskExecutionPromise = this.pollForResult();
+    this.taskExecution = this.startTask();
   }
 
   /**
@@ -43,27 +43,24 @@ class TaskPromiseWrapper<T> implements AsyncTask<T> {
    * FIXME: どうみてもポーリングしてない
    * @private
    */
-  private async pollForResult(): Promise<TaskResult<T>> {
+  private async startTask(): Promise<TaskResult<T>> {
     // タスクIDを取得し、バックエンドとの通信に使用
     const taskId = await this.getTaskId();
     this._status = 'STARTED';
 
-    const checkResult = async (): Promise<TaskResult<T>> => {
-      try {
-        // バックエンドから結果を取得（taskIdを使用）
-        const result = await this.backend.getResult<T>(taskId);
-        this._status = result.status === 'success' ? 'SUCCESS' : 'FAILURE';
-        return result;
-      } catch (error) {
-        this._status = 'FAILURE';
-        return {
-          status: 'failure',
-          error: error instanceof Error ? error : new Error(String(error)),
-        };
-      }
-    };
-
-    return checkResult();
+    try {
+      // バックエンドから結果を取得（taskIdを使用）
+      const result = await this.backend.getResult<T>(taskId);
+      this._result = result;
+      this._status = result.status === 'success' ? 'SUCCESS' : 'FAILURE';
+      return result;
+    } catch (error) {
+      this._status = 'FAILURE';
+      return {
+        status: 'failure',
+        error: error instanceof Error ? error : new Error(String(error)),
+      };
+    }
   }
 
   getTaskId(): Promise<TaskId> {
@@ -79,8 +76,7 @@ class TaskPromiseWrapper<T> implements AsyncTask<T> {
       return this._result;
     }
 
-    this._result = await this.taskExecutionPromise;
-    return this._result;
+    return await this.taskExecution;
   }
   get() {
     return unwrapResult(this.getResult());
@@ -173,8 +169,7 @@ export class Mitsuba {
    * Mitsubaを初期化
    */
   async init(): Promise<void> {
-    await this.broker.connect();
-    await this.backend.connect();
+    await Promise.all([this.broker.connect(), this.backend.connect()]);
     this.logger.info(`Mitsuba initialized: ${this.name}`);
   }
 
@@ -187,8 +182,7 @@ export class Mitsuba {
       this.workerPool = null;
     }
 
-    await this.broker.disconnect();
-    await this.backend.disconnect();
+    await Promise.all([this.broker.disconnect(), this.backend.disconnect()]);
     this.logger.info(`Mitsuba closed: ${this.name}`);
   }
 

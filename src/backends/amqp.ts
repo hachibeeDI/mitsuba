@@ -185,7 +185,7 @@ export class AMQPBackend implements Backend {
             clearTimeout(timeout);
             cleanup();
 
-            resolve({status: 'success', value: content.value.result as T});
+            resolve(content.value.result satisfies TaskResult<unknown> as TaskResult<T>);
           },
           {noAck: false},
         );
