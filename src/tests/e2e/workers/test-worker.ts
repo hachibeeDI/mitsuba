@@ -3,14 +3,11 @@
  * Docker環境内で実行される独立したワーカープロセス
  */
 
-import {Mitsuba} from '../../../index';
-import {testTasks} from '../shared/task-definitions';
+import {createApp} from '../shared/task-definitions';
 
-// 環境変数から接続情報を取得
 const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://guest:guest@rabbitmq:5672';
 const WORKER_ID = process.env.WORKER_ID || 'worker-1';
 const CONCURRENCY = Number.parseInt(process.env.CONCURRENCY || '3', 10);
-const APP_NAME = process.env.APP_NAME || 'e2e-test-worker';
 
 /**
  * 環境変数のバリデーション
@@ -34,21 +31,10 @@ async function startWorker() {
   // 環境変数の検証
   validateEnvironment();
 
-  // Mitsubaインスタンスを作成
-  const mitsuba = new Mitsuba(`${APP_NAME}-${WORKER_ID}`, {
-    broker: RABBITMQ_URL,
-    backend: RABBITMQ_URL,
-  });
+  const {app, worker} = createApp(RABBITMQ_URL, RABBITMQ_URL);
+  await app.init();
 
   try {
-    // Mitsubaを初期化
-    await mitsuba.init();
-    console.log(`Worker ${WORKER_ID} initialized and connected to RabbitMQ at ${RABBITMQ_URL}`);
-
-    // 共通タスク定義を使用
-    const {worker} = mitsuba.createTask(testTasks);
-
-    // ワーカーを起動
     await worker.start(CONCURRENCY);
     console.log(`Worker ${WORKER_ID} started with ${CONCURRENCY} concurrent processes`);
 
@@ -56,14 +42,14 @@ async function startWorker() {
     process.on('SIGTERM', async () => {
       console.log(`Worker ${WORKER_ID} received SIGTERM, shutting down...`);
       await worker.stop();
-      await mitsuba.close();
+      await app.close();
       process.exit(0);
     });
 
     process.on('SIGINT', async () => {
       console.log(`Worker ${WORKER_ID} received SIGINT, shutting down...`);
       await worker.stop();
-      await mitsuba.close();
+      await app.close();
       process.exit(0);
     });
 
@@ -71,7 +57,7 @@ async function startWorker() {
     process.on('uncaughtException', async (error) => {
       console.error(`Worker ${WORKER_ID} encountered an uncaught exception:`, error);
       await worker.stop();
-      await mitsuba.close();
+      await app.close();
       process.exit(1);
     });
 

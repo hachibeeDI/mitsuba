@@ -6,20 +6,20 @@
 
 import {describe, test, expect, beforeAll, afterAll} from 'vitest';
 
-import {Mitsuba} from '../../index';
-import {testTasks} from './shared/task-definitions';
+import type {Mitsuba} from '../../index';
+import {createApp} from './shared/task-definitions';
 
 // テスト用のRabbitMQ接続情報（ローカルマシンから接続）
 const RABBITMQ_URL = 'amqp://guest:guest@localhost:5672';
 
 describe('Mitsuba E2Eテスト', () => {
   let mitsuba: Mitsuba;
+  let tasks: ReturnType<typeof createApp>['tasks'];
 
   beforeAll(async () => {
-    mitsuba = new Mitsuba('e2e-test-client', {
-      broker: RABBITMQ_URL,
-      backend: RABBITMQ_URL,
-    });
+    const {app, tasks: mitsubaTasks} = createApp(RABBITMQ_URL, RABBITMQ_URL);
+    mitsuba = app;
+    tasks = mitsubaTasks;
 
     await mitsuba.init();
     console.log('E2Eテストクライアント初期化完了: RabbitMQ接続確立');
@@ -32,7 +32,6 @@ describe('Mitsuba E2Eテスト', () => {
   }, 10000);
 
   test('基本的なタスク実行と結果取得 (E2E)', async () => {
-    const {tasks} = mitsuba.createTask(testTasks);
     console.log('Task created');
 
     const task = tasks.addTask(5, 7);
@@ -46,9 +45,6 @@ describe('Mitsuba E2Eテスト', () => {
 
   // 複数タスクの並列実行E2Eテスト
   test('複数タスクの並列実行 (E2E)', async () => {
-    // 共通タスク定義を使用
-    const {tasks} = mitsuba.createTask(testTasks);
-
     // 両方のタスクを同時に実行
     const startTime = performance.now();
     const [resultA, resultB] = await Promise.all([tasks.taskA(7).getResult(), tasks.taskB(5).getResult()]);
@@ -71,7 +67,6 @@ describe('Mitsuba E2Eテスト', () => {
   // エラー処理のE2Eテスト
   test('タスクエラー処理 (E2E)', async () => {
     // 共通タスク定義を使用
-    const {tasks} = mitsuba.createTask(testTasks);
 
     // タスク実行
     const task = tasks.errorTask();
@@ -85,9 +80,6 @@ describe('Mitsuba E2Eテスト', () => {
 
   // 大量のタスクを同時実行するE2Eテスト
   test('大量のタスク同時実行 (E2E)', async () => {
-    // 共通タスク定義を使用
-    const {tasks} = mitsuba.createTask(testTasks);
-
     // 20個のタスクを同時に実行
     const taskCount = 20;
     const taskPromises = Array.from({length: taskCount}, (_, i) => tasks.incrementTask(i).getResult());

@@ -3,6 +3,8 @@
  * テストとワーカー両方で使用して一貫性を確保する
  */
 
+import {Mitsuba} from '../../..';
+
 export const testTasks = {
   // 基本的なタスク
   addTask: (a: number, b: number) => a + b,
@@ -96,3 +98,12 @@ export const testTasks = {
     return `成功: ${callCount}回目の呼び出し`;
   },
 } as const;
+
+export function createApp(broker: string, backend: string) {
+  const app = new Mitsuba('e2e-test-client', {
+    broker,
+    backend,
+  });
+  const {worker, tasks} = app.createTask(testTasks);
+  return {app, worker, tasks};
+}
