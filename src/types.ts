@@ -3,6 +3,8 @@
  * 分散タスク処理システムの基本的な型を定義
  */
 
+import type {LogLevel} from './logger';
+
 export type Branded<T, Brand> = T & {readonly __brand: Brand};
 
 /** タスクの実行オプション */
@@ -143,7 +145,7 @@ export type MitsubaOptions = {
   /** グレースフルシャットダウン時のタイムアウト（ミリ秒単位） */
   gracefulShutdownTimeout?: number;
   logger?: {
-    level?: 'debug' | 'info' | 'warn' | 'error';
+    level?: LogLevel;
     customLogger?: Logger;
   };
 };

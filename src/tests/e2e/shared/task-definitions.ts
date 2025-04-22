@@ -103,6 +103,9 @@ export function createApp(broker: string, backend: string) {
   const app = new Mitsuba('e2e-test-client', {
     broker,
     backend,
+    logger: {
+      level: 0,
+    },
   });
   const {worker, tasks} = app.createTask(testTasks);
   return {app, worker, tasks};

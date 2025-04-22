@@ -19,7 +19,7 @@ import {
 import {AMQPBroker} from './brokers/amqp';
 import {AMQPBackend} from './backends/amqp';
 import {WorkerPool} from './worker';
-import {getLogger} from './logger';
+import {getLogger, type Logger} from './logger';
 import {generateTaskId} from './utils';
 
 /**
@@ -119,7 +119,7 @@ export class Mitsuba {
   private broker: Broker;
   private backend: Backend;
   private workerPool: WorkerPool | null = null;
-  private readonly logger = getLogger();
+  private readonly logger: Logger;
   public readonly name: string;
 
   /**
@@ -130,6 +130,10 @@ export class Mitsuba {
     this.name = name;
     this.broker = this.createBroker(options.broker);
     this.backend = this.createBackend(options.backend);
+    this.logger = getLogger();
+    if (options.logger?.level) {
+      this.logger.setLevel(options.logger.level);
+    }
   }
 
   /**
