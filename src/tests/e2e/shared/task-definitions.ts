@@ -10,12 +10,12 @@ export const testTasks = {
   addTask: (a: number, b: number) => a + b,
 
   // 時間のかかる並列実行用タスク
-  taskA: async (value: number) => {
+  multiply2Take1000ms: async (value: number) => {
     await new Promise((resolve) => setTimeout(resolve, 1000));
     return value * 2;
   },
 
-  taskB: async (value: number) => {
+  add10Take1500ms: async (value: number) => {
     await new Promise((resolve) => setTimeout(resolve, 1500));
     return value + 10;
   },

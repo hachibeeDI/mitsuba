@@ -47,7 +47,7 @@ describe('Mitsuba E2Eテスト', () => {
   test('複数タスクの並列実行 (E2E)', async () => {
     // 両方のタスクを同時に実行
     const startTime = performance.now();
-    const [resultA, resultB] = await Promise.all([tasks.taskA(7).get(), tasks.taskB(5).get()]);
+    const [resultA, resultB] = await Promise.all([tasks.multiply2Take1000ms(7).get(), tasks.add10Take1500ms(5).get()]);
     const endTime = performance.now();
 
     // 結果確認
