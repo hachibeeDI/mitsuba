@@ -19,7 +19,7 @@ export function sequence<T>(tasks: ReadonlyArray<AsyncTask<T>>): AsyncTask<Reado
   // 空の配列に対しては即座に成功結果を返す
   if (tasks.length === 0) {
     return {
-      getTaskId: () => Promise.resolve(taskId),
+      taskId,
       getResult: async () => ({status: 'success', value: []}),
       get: () => Promise.resolve([]),
       getStatus: () => 'SUCCESS',
@@ -35,7 +35,7 @@ export function sequence<T>(tasks: ReadonlyArray<AsyncTask<T>>): AsyncTask<Reado
 
   // 結果を格納するAsyncTask
   const sequenceTask: AsyncTask<ReadonlyArray<T>> = {
-    getTaskId: () => Promise.resolve(taskId),
+    taskId,
 
     getStatus: () => _status,
 
@@ -89,7 +89,7 @@ export function chord<T, R>(task: AsyncTask<ReadonlyArray<T>>, callback?: (resul
   const taskId = generateTaskId('chord-');
   // 結果を格納するAsyncTask
   const chordTask: AsyncTask<R> = {
-    getTaskId: () => Promise.resolve(taskId),
+    taskId,
 
     getStatus: () => _status,
 

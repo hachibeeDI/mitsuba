@@ -20,20 +20,23 @@ import {AMQPBroker} from './brokers/amqp';
 import {AMQPBackend} from './backends/amqp';
 import {WorkerPool} from './worker';
 import {getLogger} from './logger';
+import {generateTaskId} from './utils';
 
 /**
  * Publisher側で使用するAsyncTask実装
  */
 class TaskPromiseWrapper<T> implements AsyncTask<T> {
-  private readonly publishResult: Promise<TaskId>;
+  public readonly taskId: TaskId;
   private readonly backend: Backend;
+  private readonly publisher: () => Promise<unknown>;
   private readonly taskExecution: Promise<TaskResult<T>>;
   private _status: TaskStatus = 'PENDING';
   private _result: TaskResult<T> | null = null;
 
-  constructor(publishResult: Promise<TaskId>, backend: Backend) {
-    this.publishResult = publishResult;
+  constructor(taskId: TaskId, backend: Backend, publisher: () => Promise<unknown>) {
+    this.taskId = taskId;
     this.backend = backend;
+    this.publisher = publisher;
 
     this.taskExecution = this.startTask();
   }
@@ -44,13 +47,15 @@ class TaskPromiseWrapper<T> implements AsyncTask<T> {
    * @private
    */
   private async startTask(): Promise<TaskResult<T>> {
-    // タスクIDを取得し、バックエンドとの通信に使用
-    const taskId = await this.getTaskId();
     this._status = 'STARTED';
 
     try {
-      // バックエンドから結果を取得（taskIdを使用）
-      const result = await this.backend.getResult<T>(taskId);
+      // consumer first
+      const resultConsumer = this.backend.getResult<T>(this.taskId);
+      // then publish
+      await this.publisher();
+
+      const result = await resultConsumer;
       this._result = result;
       this._status = result.status === 'success' ? 'SUCCESS' : 'FAILURE';
       return result;
@@ -61,10 +66,6 @@ class TaskPromiseWrapper<T> implements AsyncTask<T> {
         error: error instanceof Error ? error : new Error(String(error)),
       };
     }
-  }
-
-  getTaskId(): Promise<TaskId> {
-    return this.publishResult;
   }
 
   getStatus(): TaskStatus {
@@ -208,13 +209,15 @@ export class Mitsuba {
       if (typeof task === 'function') {
         // can't be typesafe
         (tasks as any)[taskName] = (...args: ReadonlyArray<unknown>) => {
-          return new TaskPromiseWrapper(this.broker.publishTask(taskName, args, undefined), this.backend);
+          const taskId = generateTaskId();
+          return new TaskPromiseWrapper(taskId, this.backend, () => this.broker.publishTask(taskId, taskName, args, undefined));
         };
       } else {
         const taskObj = task as {opts?: TaskOptions; call: (...args: ReadonlyArray<unknown>) => unknown};
         // can't be typesafe
         (tasks as any)[taskName as keyof T] = (...args: ReadonlyArray<unknown>) => {
-          return new TaskPromiseWrapper(this.broker.publishTask(taskName, args, taskObj.opts), this.backend);
+          const taskId = generateTaskId();
+          return new TaskPromiseWrapper(taskId, this.backend, () => this.broker.publishTask(taskId, taskName, args, taskObj.opts));
         };
       }
     }

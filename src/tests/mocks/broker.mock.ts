@@ -4,7 +4,6 @@
 import {v4 as uuidv4} from 'uuid';
 import {EventEmitter} from 'node:events';
 import type {Broker, TaskPayload, TaskOptions, TaskId, TaskHandlerResult} from '../../types';
-import {generateTaskId} from '../../utils';
 
 // 型安全なハンドラー定義
 type TaskHandler = (task: TaskPayload) => Promise<TaskHandlerResult>;
@@ -40,7 +39,7 @@ export class MockBroker implements Broker {
     this.messageQueue.removeAllListeners('task');
   }
 
-  async publishTask(taskName: string, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId> {
+  async publishTask(taskId: TaskId, taskName: string, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId> {
     await Promise.resolve();
 
     if (!this.connected) {
@@ -51,7 +50,6 @@ export class MockBroker implements Broker {
       throw new Error('Failed to publish task');
     }
 
-    const taskId = generateTaskId();
     const payload: TaskPayload = {
       id: taskId,
       taskName,

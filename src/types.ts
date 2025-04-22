@@ -45,7 +45,7 @@ export function unwrapResult<T>(a: Promise<TaskResult<T>>): Promise<T> {
  * タスク実行の状態管理と結果取得を行う
  */
 export interface AsyncTask<T> {
-  getTaskId(): Promise<TaskId>;
+  taskId: TaskId;
   /** タスク結果を取得 (成功時は値、失敗時はエラー情報を含む) */
   get(): Promise<T>;
   getResult(): Promise<TaskResult<T>>;
@@ -93,7 +93,7 @@ export type TaskHandlerResult =
 export type Broker = {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
-  publishTask(taskName: string, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId>;
+  publishTask(taskId: TaskId, taskName: string, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId>;
   consumeTask(queueName: string, handler: (task: TaskPayload) => Promise<TaskHandlerResult>): Promise<string>;
   cancelConsumer(consumerTag: string): Promise<void>;
 };

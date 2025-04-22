@@ -7,7 +7,6 @@ import {connect} from 'amqplib';
 import type {Broker, TaskId, TaskOptions, TaskPayload, TaskHandlerResult} from '../types';
 import {BrokerConnectionError, BrokerError} from '../errors';
 import {getLogger} from '../logger';
-import {generateTaskId} from '../utils';
 import {jsonSafeParse} from '../helpers';
 
 export type AMQPBrokerOptions = {
@@ -140,13 +139,12 @@ export class AMQPBroker implements Broker {
    * @returns タスクID
    * @throws ブローカーに接続していない場合
    */
-  async publishTask(taskName: string, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId> {
+  async publishTask(taskId: TaskId, taskName: string, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId> {
     await this.ensureConnection();
     if (!this.channel) {
       throw new BrokerConnectionError('Channel is not connected');
     }
 
-    const taskId = generateTaskId();
     const payload: TaskPayload = options ? {id: taskId, taskName, args, options} : {id: taskId, taskName, args};
 
     await this.channel.assertQueue(`${this.projectName}.${taskName}`, this.queueOptions);

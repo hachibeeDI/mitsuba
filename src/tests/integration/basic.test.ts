@@ -100,24 +100,10 @@ describe('Mitsuba 基本機能テスト', () => {
 
     await worker.start(1);
 
-    console.log('-----------------------1');
     const task = tasks.multiplyTask(5, 6);
 
-    console.log('-----------------------2');
-    // const result = await task.getResult();
-
-    // console.log('-----------------------3');
-    // expect(result.status).toBe('success');
-    // if (result.status === 'success') {
-    //   expect(result.value).toBe(30);
-    // }
-
-    console.log('-----------------------4');
-    // 7. タスクIDを取得してバックエンドから直接確認
-    const taskId = await task.getTaskId();
-    console.log('-----------------------5');
+    const taskId = task.taskId;
     const resultFromBackend = await mockBackend.getResult(taskId);
-    console.log('-----------------------6');
     expect(resultFromBackend.status).toBe('success');
     if (resultFromBackend.status === 'success') {
       expect(resultFromBackend.value).toBe(30);
