@@ -20,4 +20,4 @@ ENV RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
 # ポートは公開しない（ワーカープロセスは通信リスナーを持たない）
 
 # E2Eテスト用ワーカープロセスを起動
-CMD ["ts-node", "--project", "tsconfig.mjs.json", "src/tests/e2e/workers/test-worker.ts"] 
+CMD ["npx", "ts-node", "--project", "tsconfig.mjs.json", "src/tests/e2e/workers/test-worker.ts"]
