@@ -60,7 +60,7 @@ export class AMQPBackend implements Backend {
       this.channel = await this.connection.createChannel();
 
       // 結果交換機を定義（direct型）
-      await this.channel.assertExchange(this.projectName, 'direct', {durable: true});
+      await this.channel.assertExchange(this.projectName, 'direct', {durable: false});
     } catch (error) {
       this.cleanupConnection();
       throw new BackendConnectionError('Failed to establish connection', {
@@ -130,13 +130,6 @@ export class AMQPBackend implements Backend {
 
     this.logger.debug(`AMQP backend getResult called for taskId=${taskId}`);
 
-    // 一時的なキューを作成（排他的、自動削除）
-    const {queue} = await this.channel.assertQueue('', {
-      exclusive: true,
-      autoDelete: true,
-    });
-    await this.channel.bindQueue(queue, this.projectName, taskId);
-
     return new Promise<TaskResult<T>>((resolve, reject) => {
       let consumerTag = '';
       const cleanup = () => {
@@ -153,19 +146,24 @@ export class AMQPBackend implements Backend {
 
       const timeout = setTimeout(() => {
         cleanup();
-        const error = new TaskTimeoutError(taskId, timeoutMs);
-        resolve({status: 'failure', error});
+        resolve({status: 'failure', error: new TaskTimeoutError(taskId, timeoutMs)});
       }, timeoutMs);
 
       const startConsumer = async () => {
         if (!this.channel) {
-          const error = new BackendConnectionError('Channel is not connected');
-          resolve({status: 'failure', error});
+          resolve({status: 'failure', error: new BackendConnectionError('Channel is not connected')});
           return;
         }
 
         this.logger.debug(`consumer started for taskId=${taskId}`);
 
+
+        // 一時的なキューを作成（排他的、自動削除）
+        const {queue} = await this.channel.assertQueue('', {
+          exclusive: true,
+          autoDelete: true,
+        });
+        await this.channel.bindQueue(queue, this.projectName, taskId);
         const consumer = await this.channel.consume(
           queue,
           (msg) => {
