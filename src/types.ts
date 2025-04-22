@@ -49,14 +49,7 @@ export interface AsyncTask<T> {
   /** タスク結果を取得 (成功時は値、失敗時はエラー情報を含む) */
   get(): Promise<T>;
   getResult(): Promise<TaskResult<T>>;
-  /** 現在のステータスを取得 */
-  getStatus(): Promise<TaskStatus>;
-  /** 非同期待機中にステータスを監視する */
-  waitUntilComplete(options?: {
-    pollInterval?: number;
-    timeout?: number;
-  }): Promise<TaskResult<T>>;
-  /** エラー時の再試行 */
+  getStatus(): TaskStatus;
   retry(): AsyncTask<T>;
 }
 

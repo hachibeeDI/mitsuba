@@ -22,8 +22,7 @@ export function sequence<T>(tasks: ReadonlyArray<AsyncTask<T>>): AsyncTask<Reado
       getTaskId: () => Promise.resolve(taskId),
       getResult: async () => ({status: 'success', value: []}),
       get: () => Promise.resolve([]),
-      getStatus: async () => 'SUCCESS',
-      waitUntilComplete: async () => ({status: 'success', value: []}),
+      getStatus: () => 'SUCCESS',
       retry: () => {
         throw new MitsubaError('Cannot retry empty sequence task');
       },
@@ -38,18 +37,7 @@ export function sequence<T>(tasks: ReadonlyArray<AsyncTask<T>>): AsyncTask<Reado
   const sequenceTask: AsyncTask<ReadonlyArray<T>> = {
     getTaskId: () => Promise.resolve(taskId),
 
-    getStatus: async () => {
-      if (_status !== 'PENDING') {
-        return _status;
-      }
-
-      try {
-        await sequenceTask.get();
-        return _status;
-      } catch {
-        return 'FAILURE';
-      }
-    },
+    getStatus: () => _status,
 
     getResult: () => {
       if (executionPromise) {
@@ -75,33 +63,8 @@ export function sequence<T>(tasks: ReadonlyArray<AsyncTask<T>>): AsyncTask<Reado
       return executionPromise;
     },
 
-    // get関数は実際の実行を担当
     get: () => {
       return unwrapResult(sequenceTask.getResult());
-    },
-
-    // 完了まで待機
-    waitUntilComplete: async (options) => {
-      const pollInterval = options?.pollInterval || 1000;
-      const timeout = options?.timeout || 30000;
-      const startTime = Date.now();
-
-      while (Date.now() - startTime < timeout) {
-        const status = await sequenceTask.getStatus();
-        if (status === 'SUCCESS' || status === 'FAILURE') {
-          return await sequenceTask.getResult();
-        }
-
-        // 指定された間隔で待機
-        await new Promise((resolve) => setTimeout(resolve, pollInterval));
-      }
-
-      // タイムアウト時にはエラーを返す
-      _status = 'FAILURE';
-      return {
-        status: 'failure',
-        error: new Error(`Sequence task execution timed out after ${timeout}ms`),
-      };
     },
 
     retry: () => {
@@ -128,18 +91,7 @@ export function chord<T, R>(task: AsyncTask<ReadonlyArray<T>>, callback?: (resul
   const chordTask: AsyncTask<R> = {
     getTaskId: () => Promise.resolve(taskId),
 
-    getStatus: async () => {
-      if (_status !== 'PENDING') {
-        return _status;
-      }
-
-      try {
-        await chordTask.get();
-        return _status;
-      } catch {
-        return 'FAILURE';
-      }
-    },
+    getStatus: () => _status,
 
     getResult: () => {
       if (executionPromise) {
@@ -181,31 +133,6 @@ export function chord<T, R>(task: AsyncTask<ReadonlyArray<T>>, callback?: (resul
     },
 
     get: () => unwrapResult(chordTask.getResult()),
-
-    // 完了まで待機
-    waitUntilComplete: async (options) => {
-      const pollInterval = options?.pollInterval || 1000;
-      const timeout = options?.timeout || 30000;
-      const startTime = Date.now();
-
-      while (Date.now() - startTime < timeout) {
-        const status = await chordTask.getStatus();
-        if (status === 'SUCCESS' || status === 'FAILURE') {
-          return await chordTask.getResult();
-        }
-
-        // 指定された間隔で待機
-        await new Promise((resolve) => setTimeout(resolve, pollInterval));
-      }
-
-      // タイムアウト時にはエラーを返す
-      _status = 'FAILURE';
-      return {
-        status: 'failure',
-        error: new Error(`Chord task execution timed out after ${timeout}ms`),
-      };
-    },
-
     retry: () => {
       throw new MitsubaError('Cannot retry chord task directly');
     },
