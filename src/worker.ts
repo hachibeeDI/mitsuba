@@ -97,8 +97,6 @@ export class WorkerPool {
     // 各タスク用のコンシューマーを設定
     await Promise.all(taskNames.map((t) => this.setupTaskConsumer(t)));
 
-    // 並行処理用のワーカータスク実行マネージャーを開始
-    // このループはイベント駆動で実行され、メインスレッドをブロックしない
     const workerManager = this.startWorkerManager(signal);
     this.workerPromises.push(workerManager);
 

@@ -214,8 +214,7 @@ export class Mitsuba {
       if (typeof task === 'function') {
         // can't be typesafe
         (tasks as any)[taskName] = (...args: ReadonlyArray<unknown>) => {
-          return new TaskPromiseWrapper(
-            this.broker.publishTask(taskName, args, undefined), this.backend);
+          return new TaskPromiseWrapper(this.broker.publishTask(taskName, args, undefined), this.backend);
         };
       } else {
         const taskObj = task as {opts?: TaskOptions; call: (...args: ReadonlyArray<unknown>) => unknown};
@@ -226,7 +225,7 @@ export class Mitsuba {
       }
     }
 
-    const taskHandler = async (payload: TaskPayload): Promise<unknown> => {
+    const taskHandler = (payload: TaskPayload): Promise<unknown> => {
       const {taskName, args} = payload;
       const taskDef = registry[taskName as keyof T];
 
@@ -235,10 +234,10 @@ export class Mitsuba {
       }
 
       if (typeof taskDef === 'function') {
-        return await Promise.resolve(taskDef(...args));
+        return taskDef(...args);
       }
 
-      return await Promise.resolve(taskDef.call(...args));
+      return taskDef.call(...args);
     };
 
     return {
@@ -271,7 +270,6 @@ export class Mitsuba {
       },
     };
   }
-
 }
 
 /**
