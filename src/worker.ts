@@ -33,7 +33,7 @@ export class WorkerPool {
    * キー: ワーカーID、値: ブローカーから返されたコンシューマータグ
    * (コンシューマータグはリスナーの登録解除に必須)
    */
-  private consumerTags = new Map<string, string>();
+  private consumerTags: ReadonlySet<string> = new Set<string>();
 
   /** 現在の実行状態 */
   private state: WorkerPoolState = WorkerPoolState.IDLE;
@@ -84,7 +84,6 @@ export class WorkerPool {
     if (this.state === WorkerPoolState.RUNNING || this.state === WorkerPoolState.STOPPING) {
       throw new WorkerOperationError(`Cannot start worker pool in ${this.state} state`);
     }
-
     if (taskNames.length === 0) {
       this.logger.warn('No tasks registered, worker will not consume any messages');
       return;
@@ -92,12 +91,11 @@ export class WorkerPool {
 
     this.state = WorkerPoolState.RUNNING;
     this.abortController = new AbortController();
-    const signal = this.abortController.signal;
 
-    // 各タスク用のコンシューマーを設定
-    await Promise.all(taskNames.map((t) => this.setupTaskConsumer(t)));
+    this.consumerTags = new Set(await Promise.all(taskNames.map((t) => this.setupTaskConsumer(t))));
 
-    const workerManager = this.startWorkerManager(signal);
+    const workerManager = this.startWorkerManager(this.abortController.signal);
+    // FIXME:
     this.workerPromises.push(workerManager);
 
     this.logger.info(`Started worker pool for ${taskNames.length} task type(s) with concurrency ${concurrency}`);
@@ -110,26 +108,23 @@ export class WorkerPool {
    * タスクコンシューマーをセットアップ
    * 特定のタスク名に対するリスナーを登録し、consumerTagsマップに保存する
    */
-  private async setupTaskConsumer(taskName: string): Promise<void> {
+  private async setupTaskConsumer(taskName: string): Promise<string> {
     const workerId = `worker-${taskName}-${Date.now()}`;
 
     try {
-      const consumerTag = await this.broker.consumeTask(taskName, (payload) => {
-        // キューにタスクを追加
+      const tag = await this.broker.consumeTask(taskName, (payload) => {
         this.taskQueue.enqueue({
           taskName,
           payload,
         });
 
-        // タスクを受け付けた状態を返す
         return Promise.resolve({
           status: 'accepted',
           taskId: payload.id,
         });
       });
-
-      this.consumerTags.set(workerId, consumerTag);
-      this.logger.debug(`Registered consumer for ${taskName} with ID ${workerId} (tag: ${consumerTag})`);
+      this.logger.debug(`Registered consumer for ${taskName} with ID ${workerId} (tag: ${tag})`);
+      return tag;
     } catch (error) {
       this.logger.error(`Failed to setup consumer for ${taskName}:`, error);
       throw error;
@@ -147,10 +142,12 @@ export class WorkerPool {
    */
   private async startWorkerManager(signal: AbortSignal): Promise<void> {
     this.taskQueue.listen((queue) => {
+      this.logger.debug('Enqueue detected');
       let task: {taskName: string; payload: TaskPayload} | undefined;
       do {
         task = queue.dequeue();
         if (task != null) {
+          this.logger.debug(`Start Processing task ${JSON.stringify(task)}`);
           void this.processTask(task.taskName, task.payload);
         }
       } while (task);
@@ -177,7 +174,7 @@ export class WorkerPool {
       // タスク実行
       const r = await this.taskHandlerFn(payload);
 
-      this.logger.debug(`Task ${taskId} completed successfully`);
+      this.logger.debug(`Task ${taskName} ${taskId} completed successfully with result=${JSON.stringify(r)}`);
       this.backend.storeResult(payload.id, {status: 'success', value: r}, payload.options?.resultExpires);
     } catch (err) {
       this.logger.error(`Task ${taskId} failed:`, err);
@@ -259,12 +256,9 @@ export class WorkerPool {
     this.logger.info(`Cancelling ${this.consumerTags.size} consumers`);
 
     const results = await Promise.allSettled(
-      Array.from(this.consumerTags.entries()).map(([workerId, tag]) => {
-        return this.cancelSingleConsumer(tag).then(
-          () => this.logger.info(`Successfully cancelled consumer ${workerId}`),
-          (reason) => this.logger.warn(`Failed to cancel consumer ${workerId}: ${reason}`),
-        );
-      }),
+      Array.from(this.consumerTags.values()).map((tag) =>
+        this.cancelSingleConsumer(tag).catch(() => this.logger.error(`Failed to cancel consumer ${tag}`)),
+      ),
     );
 
     const failedCount = results.filter((r) => r.status === 'rejected').length;
@@ -319,7 +313,7 @@ export class WorkerPool {
    */
   private resetPool(): void {
     this.workerPromises = [];
-    this.consumerTags.clear();
+    this.consumerTags = new Set();
     this.activeTaskCount = 0;
     this.taskQueue = new Queue();
     this.processingTasks.clear();
