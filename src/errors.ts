@@ -94,13 +94,15 @@ export class TaskExecutionError extends MitsubaError {
  */
 export class TaskRetrievalError extends MitsubaError {
   name = 'TaskRetrievalError';
+  reason: string;
 
   /**
    * @param taskId - タスクID
    * @param options - エラーオプション
    */
-  constructor(taskId: string, options?: ErrorOptions) {
-    super(`Failed to retrieve task result - ID: ${taskId}`, options);
+  constructor(taskId: string, options?: ErrorOptions & {reason?: string}) {
+    super(`ID: ${taskId} - ${options?.reason ?? 'Failed to retrieve task result '}`, options);
+    this.reason = options?.reason ?? '';
   }
 }
 
