@@ -57,11 +57,62 @@ export class MockBackend implements Backend {
       throw new Error('Failed to store result');
     }
 
-    console.log('store result', result);
     const toStore: StoredResult<unknown> = expiresIn ? {...result, expiresAt: Date.now() + expiresIn * 1000} : result;
 
     this.results.set(taskId, toStore);
     this.messageQueue.emit('taskResult', {taskId, result});
+  }
+
+  async startConsume<T>(taskId: TaskId, cb: (r: TaskResult<T>) => void): Promise<void> {
+    if (!this.connected) {
+      cb({
+        status: 'failure',
+        error: new Error('Backend is not connected'),
+      });
+      return;
+    }
+
+    if (this.shouldFailRetrieve) {
+      cb({
+        status: 'failure',
+        error: new TaskRetrievalError(taskId),
+      });
+      return;
+    }
+
+    const checkResult = (): StoredResult<T> | undefined => {
+      const storedResult = this.results.get(taskId);
+
+      // TTLが設定されていて期限切れの場合はnullを返す
+      if (storedResult?.expiresAt && storedResult.expiresAt < Date.now()) {
+        this.results.delete(taskId);
+        return undefined;
+      }
+
+      return storedResult as StoredResult<T>;
+    };
+
+    const initialResult = checkResult();
+    if (initialResult) {
+      console.log('initial check passed', initialResult);
+      cb(initialResult as TaskResult<T>);
+      return;
+    }
+
+    const timeout = 100;
+    const interval = Math.max(1, timeout / 50);
+    pooling(
+      () => {
+        const r = checkResult();
+        if (r == null) {
+          return {continue: true};
+        }
+        return {continue: false, v: r};
+      },
+      {interval, maxRetry: Math.min(timeout, 50)},
+    )
+      .then(cb)
+      .catch((_err) => ({status: 'failure', error: new TaskTimeoutError(taskId, timeout)}));
   }
 
   async getResult<T>(taskId: TaskId, timeout = 5000): Promise<TaskResult<T>> {

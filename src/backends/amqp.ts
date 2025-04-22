@@ -117,6 +117,43 @@ export class AMQPBackend implements Backend {
     }
   }
 
+  async startConsume<T>(taskId: TaskId, cb: (r: TaskResult<T>) => void): Promise<void> {
+    if (!this.channel) {
+      throw new BackendConnectionError('Channel is not connected');
+    }
+
+    const {queue} = await this.channel.assertQueue('', {
+      exclusive: true,
+      autoDelete: true,
+      durable: false,
+    });
+
+    await this.channel.bindQueue(queue, this.exchange, taskId);
+    await this.channel.consume(
+      queue,
+      (msg) => {
+        if (!msg) {
+          return; // キャンセル通知の場合
+        }
+
+        const msgContent = msg.content.toString();
+        this.logger.debug(`Start handling consumer for taskId=${taskId} msg=${JSON.stringify(msgContent)}`);
+
+        const content = jsonSafeParse(msgContent);
+        if (content.kind === 'failure') {
+          throw new AssertionError({message: 'Malformed JSON received', actual: msgContent});
+        }
+        if (!isChannelPayload(content.value)) {
+          throw new AssertionError({message: 'Invalid payload', actual: content.value});
+        }
+
+        this.channel?.ack(msg);
+        cb(content.value.result satisfies TaskResult<unknown> as TaskResult<T>);
+      },
+      {noAck: false},
+    );
+  }
+
   /**
    * バックエンドからタスク結果を取得
    * @param taskId - タスクID
@@ -129,11 +166,20 @@ export class AMQPBackend implements Backend {
       throw new BackendConnectionError('Channel is not connected');
     }
 
+    // 一時的なキューを作成（排他的、自動削除）
+    const {queue} = await this.channel.assertQueue('', {
+      exclusive: true,
+      autoDelete: true,
+      durable: false,
+    });
+
+    // 既存のメッセージがないか確認するためにsourceExchangeバインド前に一度キューを確認
+    await this.channel.bindQueue(queue, this.exchange, taskId);
+
     this.logger.debug(`AMQP backend getResult called for taskId=${taskId}`);
 
     return new Promise<TaskResult<T>>((resolve, reject) => {
       let consumerTag = '';
-      let queueName = '';
 
       const cleanup = () => {
         if (consumerTag && this.channel) {
@@ -142,8 +188,8 @@ export class AMQPBackend implements Backend {
           });
         }
 
-        if (queueName && this.channel) {
-          this.channel.unbindQueue(queueName, this.exchange, taskId).catch((err) => {
+        if (this.channel) {
+          this.channel.unbindQueue(queue, this.exchange, taskId).catch((err) => {
             this.logger.error('Error unbinding queue:', err);
           });
         }
@@ -159,18 +205,6 @@ export class AMQPBackend implements Backend {
           resolve({status: 'failure', error: new BackendConnectionError('Channel is not connected')});
           return;
         }
-
-        // 一時的なキューを作成（排他的、自動削除）
-        const {queue} = await this.channel.assertQueue('', {
-          exclusive: true,
-          autoDelete: true,
-          durable: false,
-        });
-        queueName = queue;
-
-        // 既存のメッセージがないか確認するためにsourceExchangeバインド前に一度キューを確認
-        await this.channel.bindQueue(queue, this.exchange, taskId);
-
         this.logger.debug(`consumer started for taskId=${taskId}, queue=${queue}`);
 
         const consumer = await this.channel.consume(

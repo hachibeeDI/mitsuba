@@ -107,8 +107,19 @@ export type Broker = {
 export type Backend = {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
+  /**
+   * Store a result of the task by worker.
+   * @param taskId
+   * @param result
+   * @param expiresIn
+   */
   storeResult(taskId: TaskId, result: TaskResult<unknown>, expiresIn?: number): Promise<void>;
+  /**
+   * Read a result by producer
+   * @param taskId
+   */
   getResult<T>(taskId: TaskId): Promise<TaskResult<T>>;
+  startConsume<T>(taskId: TaskId, cb: (r: TaskResult<T>) => void): Promise<void>;
 };
 
 /** ワーカープールの状態 */

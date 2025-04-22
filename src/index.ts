@@ -21,6 +21,7 @@ import {AMQPBackend} from './backends/amqp';
 import {WorkerPool} from './worker';
 import {getLogger, type Logger} from './logger';
 import {generateTaskId} from './utils';
+import EventEmitter from 'node:events';
 
 /**
  * Publisher側で使用するAsyncTask実装
@@ -29,7 +30,7 @@ class TaskPromiseWrapper<T> implements AsyncTask<T> {
   public readonly taskId: TaskId;
   private readonly backend: Backend;
   private readonly publisher: () => Promise<unknown>;
-  private readonly taskExecution: Promise<TaskResult<T>>;
+  private readonly ev: EventEmitter;
   private _status: TaskStatus = 'PENDING';
   private _result: TaskResult<T> | null = null;
 
@@ -38,35 +39,37 @@ class TaskPromiseWrapper<T> implements AsyncTask<T> {
     this.backend = backend;
     this.publisher = publisher;
 
-    this.taskExecution = this.startTask();
+    this.ev = new EventEmitter();
+    this.ev.once('done', (t: TaskResult<T>) => {
+      this._status = t.status === 'success' ? 'SUCCESS' : 'FAILURE';
+      this._result = t;
+    });
+
+    this.backend.startConsume(taskId, (r) => this.ev.emit('done', r)).then(() => this.publisher());
   }
 
-  /**
-   * 結果が利用可能になるまでポーリングする
-   * FIXME: どうみてもポーリングしてない
-   * @private
-   */
-  private async startTask(): Promise<TaskResult<T>> {
-    this._status = 'STARTED';
+  /** */
+  // private async startTask(): Promise<TaskResult<T>> {
+  //   this._status = 'STARTED';
 
-    try {
-      // consumer first
-      const resultConsumer = this.backend.getResult<T>(this.taskId);
-      // then publish
-      await this.publisher();
+  //   try {
+  //     // consumer first
+  //     const resultConsumer = this.backend.getResult<T>(this.taskId);
+  //     // then publish
+  //     await this.publisher();
 
-      const result = await resultConsumer;
-      this._result = result;
-      this._status = result.status === 'success' ? 'SUCCESS' : 'FAILURE';
-      return result;
-    } catch (error) {
-      this._status = 'FAILURE';
-      return {
-        status: 'failure',
-        error: error instanceof Error ? error : new Error(String(error)),
-      };
-    }
-  }
+  //     const result = await resultConsumer;
+  //     this._result = result;
+  //     this._status = result.status === 'success' ? 'SUCCESS' : 'FAILURE';
+  //     return result;
+  //   } catch (error) {
+  //     this._status = 'FAILURE';
+  //     return {
+  //       status: 'failure',
+  //       error: error instanceof Error ? error : new Error(String(error)),
+  //     };
+  //   }
+  // }
 
   getStatus(): TaskStatus {
     return this._status;
@@ -77,7 +80,13 @@ class TaskPromiseWrapper<T> implements AsyncTask<T> {
       return this._result;
     }
 
-    return await this.taskExecution;
+    return new Promise((resolve) => {
+      this.ev.once('done', (t: TaskResult<T>) => {
+        this._status = t.status === 'success' ? 'SUCCESS' : 'FAILURE';
+        this._result = t;
+        resolve(t);
+      });
+    });
   }
   get() {
     return unwrapResult(this.getResult());
