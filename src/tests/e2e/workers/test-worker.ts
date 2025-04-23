@@ -58,7 +58,6 @@ async function startWorker() {
       process.exit(1);
     });
 
-    // keepalive（このプロセスを実行し続ける）
     console.log(`Worker ${WORKER_ID} running and waiting for tasks...`);
 
     await worker.start(CONCURRENCY);
@@ -69,7 +68,6 @@ async function startWorker() {
   }
 }
 
-// プロセス起動
 startWorker().catch((error) => {
   console.error('Fatal error starting worker:', error);
   process.exit(1);
