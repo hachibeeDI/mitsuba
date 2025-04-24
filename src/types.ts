@@ -48,7 +48,10 @@ export function unwrapResult<T>(a: Promise<TaskResult<T>>): Promise<T> {
   });
 }
 
-/** */
+/**
+ * Result of task.
+ * It can be called "Producer".
+ */
 export interface AsyncResult<T> {
   taskId: TaskId;
   /**
@@ -133,6 +136,14 @@ export type Backend = {
    * @param taskId
    */
   getResult<T>(taskId: TaskId): Promise<TaskResult<T>>;
+  /**
+   * More stable version of [getResult].
+   * You can sure consumer starts before publish.
+   * For some MQ, you should register consumer before publish because worker ended imemdiate,
+   * publish tiggered before consumer so message is going to be lost.
+   * @param taskId
+   * @param cb
+   */
   startConsume<T>(taskId: TaskId, cb: (r: TaskResult<T>) => void): Promise<void>;
 };
 

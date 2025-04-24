@@ -27,97 +27,48 @@ import EventEmitter from 'node:events';
 /**
  * Publisher側で使用するAsyncTask実装
  */
-class TaskPromiseWrapper<T> implements AsyncResult<T> {
+class TaskProducer<T> implements AsyncResult<T> {
   public readonly taskId: TaskId;
   private readonly backend: Backend;
   private readonly publisher: () => Promise<unknown>;
-  private readonly ev: EventEmitter;
-  private _status: TaskStatus = 'PENDING';
-  private _result: TaskResult<T> | null = null;
+  private status: TaskStatus = 'PENDING';
+  private resultCache: TaskResult<T> | null = null;
+
+  private readonly consumerProcess: Promise<TaskResult<T>>;
 
   constructor(taskId: TaskId, backend: Backend, publisher: () => Promise<unknown>) {
     this.taskId = taskId;
     this.backend = backend;
     this.publisher = publisher;
 
-    this.ev = new EventEmitter();
-    this.ev.once('done', (t: TaskResult<T>) => {
-      this._status = t.status === 'success' ? 'SUCCESS' : 'FAILURE';
-      this._result = t;
-    });
+    this.consumerProcess = new Promise((done) => {
+      const ev = new EventEmitter();
+      ev.once('done', (t: TaskResult<T>) => {
+        this.status = t.status === 'success' ? 'SUCCESS' : 'FAILURE';
+        this.resultCache = t;
+        done(this.resultCache);
+      });
 
-    this.backend.startConsume(taskId, (r) => this.ev.emit('done', r)).then(() => this.publisher());
+      this.backend.startConsume(taskId, (r) => ev.emit('done', r)).then(() => this.publisher());
+    });
   }
 
-  /** */
-  // private async startTask(): Promise<TaskResult<T>> {
-  //   this._status = 'STARTED';
-
-  //   try {
-  //     // consumer first
-  //     const resultConsumer = this.backend.getResult<T>(this.taskId);
-  //     // then publish
-  //     await this.publisher();
-
-  //     const result = await resultConsumer;
-  //     this._result = result;
-  //     this._status = result.status === 'success' ? 'SUCCESS' : 'FAILURE';
-  //     return result;
-  //   } catch (error) {
-  //     this._status = 'FAILURE';
-  //     return {
-  //       status: 'failure',
-  //       error: error instanceof Error ? error : new Error(String(error)),
-  //     };
-  //   }
-  // }
-
   getStatus(): TaskStatus {
-    return this._status;
+    return this.status;
   }
 
   async getResult(): Promise<TaskResult<T>> {
-    if (this._result) {
-      return this._result;
+    if (this.resultCache) {
+      return this.resultCache;
     }
 
-    return new Promise((resolve) => {
-      this.ev.once('done', (t: TaskResult<T>) => {
-        this._status = t.status === 'success' ? 'SUCCESS' : 'FAILURE';
-        this._result = t;
-        resolve(t);
-      });
-    });
+    return await this.consumerProcess;
   }
   get() {
     return unwrapResult(this.getResult());
   }
-
-  async waitUntilComplete(options?: {pollInterval?: number; timeout?: number}): Promise<TaskResult<T>> {
-    const pollInterval = options?.pollInterval || 1000;
-    const timeout = options?.timeout || 30000;
-    const startTime = Date.now();
-
-    while (Date.now() - startTime < timeout) {
-      const status = await this.getStatus();
-      if (status === 'SUCCESS' || status === 'FAILURE') {
-        return this.getResult();
-      }
-
-      // 指定された間隔で待機
-      await new Promise((resolve) => setTimeout(resolve, pollInterval));
-    }
-
-    // タイムアウト時にはエラーを返す
-    this._status = 'FAILURE';
-    return {
-      status: 'failure',
-      error: new Error(`Task execution timed out after ${timeout}ms`),
-    };
-  }
-
   retry(): AsyncResult<T> {
-    this._status = 'RETRY';
+    this.status = 'RETRY';
     throw new Error('Cannot retry task before it has been published');
   }
 }
@@ -226,14 +177,14 @@ export class Mitsuba {
         // can't be typesafe
         (tasks as any)[taskName] = (...args: ReadonlyArray<unknown>) => {
           const taskId = generateTaskId();
-          return new TaskPromiseWrapper(taskId, this.backend, () => this.broker.publishTask(taskId, taskName, args, undefined));
+          return new TaskProducer(taskId, this.backend, () => this.broker.publishTask(taskId, taskName, args, undefined));
         };
       } else {
         const taskObj = task as {opts?: TaskOptions; call: (...args: ReadonlyArray<unknown>) => unknown};
         // can't be typesafe
         (tasks as any)[taskName as keyof T] = (...args: ReadonlyArray<unknown>) => {
           const taskId = generateTaskId();
-          return new TaskPromiseWrapper(taskId, this.backend, () => this.broker.publishTask(taskId, taskName, args, taskObj.opts));
+          return new TaskProducer(taskId, this.backend, () => this.broker.publishTask(taskId, taskName, args, taskObj.opts));
         };
       }
     }
