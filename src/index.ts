@@ -6,8 +6,8 @@ import {
   type MitsubaOptions,
   type Broker,
   type Backend,
-  type TaskRegistry,
-  type AsyncTask,
+  type TaskDefinition,
+  type AsyncResult,
   type TaskOptions,
   type TaskStatus,
   type TaskPayload,
@@ -26,7 +26,7 @@ import EventEmitter from 'node:events';
 /**
  * Publisher側で使用するAsyncTask実装
  */
-class TaskPromiseWrapper<T> implements AsyncTask<T> {
+class TaskPromiseWrapper<T> implements AsyncResult<T> {
   public readonly taskId: TaskId;
   private readonly backend: Backend;
   private readonly publisher: () => Promise<unknown>;
@@ -115,7 +115,7 @@ class TaskPromiseWrapper<T> implements AsyncTask<T> {
     };
   }
 
-  retry(): AsyncTask<T> {
+  retry(): AsyncResult<T> {
     this._status = 'RETRY';
     throw new Error('Cannot retry task before it has been published');
   }
@@ -205,7 +205,7 @@ export class Mitsuba {
    * @param registry - タスクレジストリ
    * @returns タスク実行関数マップとワーカーオブジェクト
    */
-  createTask<const T extends TaskRegistry<string, any>>(
+  createTask<const T extends TaskDefinition<string, any>>(
     registry: T,
   ): {
     tasks: CreatedTask<T>;
@@ -293,4 +293,4 @@ export function mitsuba(name: string, options: MitsubaOptions): Mitsuba {
 }
 
 // 必要なタイプのエクスポート
-export type {MitsubaOptions, AsyncTask, TaskOptions, TaskStatus, TaskPayload, WorkerPoolState} from './types';
+export type {MitsubaOptions, AsyncResult as AsyncTask, TaskOptions, TaskStatus, TaskPayload, WorkerPoolState} from './types';

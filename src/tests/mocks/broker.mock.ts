@@ -124,16 +124,11 @@ export class MockBroker implements Broker {
   async cancelConsumer(consumerTag: string): Promise<void> {
     await Promise.resolve();
 
-    if (!this.connected) {
-      throw new Error('Broker is not connected');
-    }
-
     const queueName = this.consumerTags.get(consumerTag);
     if (queueName) {
       this.handlers.delete(queueName);
       this.consumerTags.delete(consumerTag);
 
-      // メッセージキューのリスナーを削除
       this.messageQueue.removeAllListeners('task');
     }
   }

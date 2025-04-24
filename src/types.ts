@@ -1,36 +1,41 @@
-/**
- * Mitsuba タイプ定義
- * 分散タスク処理システムの基本的な型を定義
- */
+/** */
 
 import type {LogLevel} from './logger';
 
 export type Branded<T, Brand> = T & {readonly __brand: Brand};
 
-/** タスクの実行オプション */
+/** No options works so far. */
 export type TaskOptions = {
-  /** 高いほど優先して実行 */
+  /** */
   priority?: number;
-  /** 秒単位 */
-  retryDelay?: number;
-  /** 自動リトライする例外の種類 */
-  autoretryFor?: Array<Error | ((e: unknown) => boolean)>;
+  /** */
+  autoretryFor?: ReadonlyArray<Error | ((e: unknown) => boolean)>;
   maxRetries?: number;
+  /**
+   * https://docs.celeryq.dev/en/latest/reference/celery.app.task.html#celery.app.task.Task.default_retry_delay
+   * 180 as default (which means 3 minutes).
+   */
+  defaultRetryDelay?: number;
   retryCount?: number;
-  /** バックオフ処理にて指数関数的に待機時間を増加させる */
-  exponentialBackoff?: boolean;
-  /** 秒単位 */
-  resultExpires?: number;
+  /**
+   * seconds.
+   * If set, autoretries will be delayed following the rules of exponential backoff.
+   * 0 as default.
+   */
+  retryBackoff?: number;
+  /**
+   * https://docs.celeryq.dev/en/latest/userguide/tasks.html#Task.retry_backoff_max
+   */
+  retryBackoffMax?: number;
+  /** unix timestamp */
+  expires?: number;
 };
 
-/** タスクの状態 */
 export type TaskStatus = 'PENDING' | 'STARTED' | 'SUCCESS' | 'FAILURE' | 'RETRY';
 
 export type TaskId = Branded<string, '--task-id--'>;
 
-/**
- * タスク結果か失敗を表す型
- */
+/** */
 export type TaskResult<T> = {status: 'success'; value: T} | {status: 'failure'; error: Error; retryCount?: undefined | number};
 
 export function unwrapResult<T>(a: Promise<TaskResult<T>>): Promise<T> {
@@ -42,17 +47,21 @@ export function unwrapResult<T>(a: Promise<TaskResult<T>>): Promise<T> {
   });
 }
 
-/**
- * 非同期タスクインターフェース
- * タスク実行の状態管理と結果取得を行う
- */
-export interface AsyncTask<T> {
+/** */
+export interface AsyncResult<T> {
   taskId: TaskId;
-  /** タスク結果を取得 (成功時は値、失敗時はエラー情報を含む) */
+  /**
+   * get result of remote task as Promise
+   */
   get(): Promise<T>;
+  /**
+   * get bare result of remote task.
+   * Which means, AsyncTask.get could throw but getResult doesn't.
+   */
   getResult(): Promise<TaskResult<T>>;
+  /** confirm task status as synchronous */
   getStatus(): TaskStatus;
-  retry(): AsyncTask<T>;
+  retry(): AsyncResult<T>;
 }
 
 export type TaskFunc<Args extends ReadonlyArray<unknown>, R> = {
@@ -60,18 +69,14 @@ export type TaskFunc<Args extends ReadonlyArray<unknown>, R> = {
   call: (...args: Args) => R;
 };
 
-/**
- * タスク定義レジストリ
- * システムに登録する処理関数のマッピング
- */
-export type TaskRegistry<
+export type TaskDefinition<
   Keys extends string,
   Fns extends (...args: ReadonlyArray<any>) => any | TaskFunc<ReadonlyArray<any>, any>,
 > = Record<Keys, Fns>;
 
-type TaskPublisher<Args extends ReadonlyArray<unknown>, R> = (...args: Args) => AsyncTask<R>;
+type TaskPublisher<Args extends ReadonlyArray<unknown>, R> = (...args: Args) => AsyncResult<R>;
 
-export type CreatedTask<T extends TaskRegistry<never, never>> = {
+export type CreatedTask<T extends TaskDefinition<never, never>> = {
   [K in keyof T]: T[K] extends (...args: infer Args) => infer R
     ? TaskPublisher<Args, R>
     : T[K] extends TaskFunc<infer Args, infer R>
@@ -95,8 +100,16 @@ export type TaskHandlerResult =
 export type Broker = {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
+  /**
+   * Producer asks worker to process the task
+   */
   publishTask(taskId: TaskId, taskName: string, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId>;
-  consumeTask(queueName: string, handler: (task: TaskPayload) => Promise<TaskHandlerResult>): Promise<string>;
+  /**
+   * Workers will consume task
+   * @param taskName
+   * @param handler
+   */
+  consumeTask(taskName: string, handler: (task: TaskPayload) => Promise<TaskHandlerResult>): Promise<string>;
   cancelConsumer(consumerTag: string): Promise<void>;
 };
 
@@ -139,6 +152,34 @@ export interface TaskPayload {
   taskName: string;
   args: ReadonlyArray<unknown>;
   options?: TaskOptions | undefined;
+}
+
+/**
+ */
+export function isTaskPayload(payload: unknown): payload is TaskPayload {
+  if (!payload || typeof payload !== 'object') {
+    return false;
+  }
+
+  const p = payload as Record<string, unknown>;
+
+  if (typeof p.id !== 'string' || !p.id) {
+    return false;
+  }
+
+  if (typeof p.taskName !== 'string' || !p.taskName) {
+    return false;
+  }
+
+  if (!Array.isArray(p.args)) {
+    return false;
+  }
+
+  if (p.options !== undefined && (typeof p.options !== 'object' || p.options === null)) {
+    return false;
+  }
+
+  return true;
 }
 
 /**

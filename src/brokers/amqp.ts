@@ -4,7 +4,7 @@
 import type {Channel, ChannelModel, Options, Replies} from 'amqplib';
 import {connect} from 'amqplib';
 
-import type {Broker, TaskId, TaskOptions, TaskPayload, TaskHandlerResult} from '../types';
+import {type Broker, type TaskId, type TaskOptions, type TaskPayload, type TaskHandlerResult, isTaskPayload} from '../types';
 import {BrokerConnectionError, BrokerError} from '../errors';
 import {getLogger} from '../logger';
 import {jsonSafeParse} from '../helpers';
@@ -199,7 +199,7 @@ export class AMQPBroker implements Broker {
           return;
         }
         this.logger.info(`Start consuming ${this.projectName}.${taskName} with message=${JSON.stringify(content.value)}`);
-        if (this.isTaskPayload(content.value) === false) {
+        if (isTaskPayload(content.value) === false) {
           this.logger.error(`Invalid task payload received from queue ${taskName}`);
           this.channel?.nack(msg, false, false);
           return;
@@ -234,36 +234,6 @@ export class AMQPBroker implements Broker {
     this.consumers.set(taskName, consumeReply);
     this.logger.debug(`Started consuming from queue ${taskName} with consumer tag ${consumeReply.consumerTag}`);
     return consumeReply.consumerTag;
-  }
-
-  /**
-   * ペイロードがTaskPayload型かどうかを検証する型ガード
-   * @private
-   */
-  private isTaskPayload(payload: unknown): payload is TaskPayload {
-    if (!payload || typeof payload !== 'object') {
-      return false;
-    }
-
-    const p = payload as Record<string, unknown>;
-
-    if (typeof p.id !== 'string' || !p.id) {
-      return false;
-    }
-
-    if (typeof p.taskName !== 'string' || !p.taskName) {
-      return false;
-    }
-
-    if (!Array.isArray(p.args)) {
-      return false;
-    }
-
-    if (p.options !== undefined && (typeof p.options !== 'object' || p.options === null)) {
-      return false;
-    }
-
-    return true;
   }
 
   /**

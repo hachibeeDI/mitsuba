@@ -175,14 +175,14 @@ export class WorkerPool {
       const r = await this.taskHandlerFn(payload);
 
       this.logger.debug(`Task ${taskName} ${taskId} completed successfully with result=${JSON.stringify(r)}`);
-      this.backend.storeResult(payload.id, {status: 'success', value: r}, payload.options?.resultExpires);
+      this.backend.storeResult(payload.id, {status: 'success', value: r}, payload.options?.expires);
     } catch (err) {
       this.logger.error(`Task ${taskId} failed:`, err);
 
       this.backend.storeResult(
         payload.id,
         {status: 'failure', error: err instanceof Error ? err : new Error(String(err))},
-        payload.options?.resultExpires,
+        payload.options?.expires,
       );
     } finally {
       // タスク完了
@@ -242,11 +242,7 @@ export class WorkerPool {
     return this.state;
   }
 
-  /**
-   * 全コンシューマーをキャンセル
-   * consumerTagsマップに保存されているすべてのコンシューマータグを使用して
-   * ブローカーに登録されたリスナーを解除する
-   */
+  /** */
   private async cancelAllConsumers(): Promise<void> {
     if (this.consumerTags.size === 0) {
       this.logger.info('No consumers to cancel');
@@ -257,7 +253,10 @@ export class WorkerPool {
 
     const results = await Promise.allSettled(
       Array.from(this.consumerTags.values()).map((tag) =>
-        this.cancelSingleConsumer(tag).catch(() => this.logger.error(`Failed to cancel consumer ${tag}`)),
+        this.broker
+          .cancelConsumer(tag)
+          // FIXME: looks AI generated garbage
+          .catch(() => this.logger.error(`Failed to cancel consumer ${tag}`)),
       ),
     );
 
@@ -265,14 +264,6 @@ export class WorkerPool {
     if (failedCount > 0) {
       this.logger.warn(`${failedCount} consumers failed to cancel properly`);
     }
-  }
-
-  /**
-   * 単一コンシューマーをキャンセル
-   */
-  private async cancelSingleConsumer(tag: string): Promise<boolean> {
-    await this.broker.cancelConsumer(tag);
-    return true;
   }
 
   /**

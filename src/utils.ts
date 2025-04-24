@@ -2,7 +2,7 @@
  * Mitsuba ユーティリティ関数
  */
 import {v4 as uuidv4} from 'uuid';
-import {unwrapResult, type AsyncTask, type TaskId, type TaskResult} from './types';
+import {unwrapResult, type AsyncResult, type TaskId, type TaskResult} from './types';
 import {MitsubaError} from './errors';
 
 export function generateTaskId(prefix = ''): TaskId {
@@ -14,7 +14,7 @@ export function generateTaskId(prefix = ''): TaskId {
  * @param tasks - タスク配列
  * @returns 結果配列のAsyncTask
  */
-export function sequence<T>(tasks: ReadonlyArray<AsyncTask<T>>): AsyncTask<ReadonlyArray<T>> {
+export function sequence<T>(tasks: ReadonlyArray<AsyncResult<T>>): AsyncResult<ReadonlyArray<T>> {
   const taskId = generateTaskId('sequence-');
   // 空の配列に対しては即座に成功結果を返す
   if (tasks.length === 0) {
@@ -34,7 +34,7 @@ export function sequence<T>(tasks: ReadonlyArray<AsyncTask<T>>): AsyncTask<Reado
   let _status: 'PENDING' | 'STARTED' | 'SUCCESS' | 'FAILURE' | 'RETRY' = 'PENDING';
 
   // 結果を格納するAsyncTask
-  const sequenceTask: AsyncTask<ReadonlyArray<T>> = {
+  const sequenceTask: AsyncResult<ReadonlyArray<T>> = {
     taskId,
 
     getStatus: () => _status,
@@ -81,14 +81,14 @@ export function sequence<T>(tasks: ReadonlyArray<AsyncTask<T>>): AsyncTask<Reado
  * @param callback - コールバック関数
  * @returns コールバック結果のAsyncTask
  */
-export function chord<T, R>(task: AsyncTask<ReadonlyArray<T>>, callback?: (results: ReadonlyArray<T>) => R): AsyncTask<R> {
+export function chord<T, R>(task: AsyncResult<ReadonlyArray<T>>, callback?: (results: ReadonlyArray<T>) => R): AsyncResult<R> {
   // 処理結果をキャッシュするための変数
   let executionPromise: Promise<TaskResult<R>> | null = null;
   let _status: 'PENDING' | 'STARTED' | 'SUCCESS' | 'FAILURE' | 'RETRY' = 'PENDING';
 
   const taskId = generateTaskId('chord-');
   // 結果を格納するAsyncTask
-  const chordTask: AsyncTask<R> = {
+  const chordTask: AsyncResult<R> = {
     taskId,
 
     getStatus: () => _status,
