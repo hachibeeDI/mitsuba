@@ -15,6 +15,7 @@ import {
   type TaskId,
   type TaskResult,
   unwrapResult,
+  type TaskName,
 } from './types';
 import {AMQPBroker} from './brokers/amqp';
 import {AMQPBackend} from './backends/amqp';
@@ -215,9 +216,11 @@ export class Mitsuba {
     };
   } {
     const tasks = {} as CreatedTask<T>;
-    const registeredTaskNames: Array<string> = [];
+    const registeredTaskNames: Array<TaskName> = [];
 
-    for (const [taskName, task] of Object.entries(registry)) {
+    for (const [bareTaskName, task] of Object.entries(registry)) {
+      const taskName = bareTaskName as TaskName;
+
       registeredTaskNames.push(taskName);
       if (typeof task === 'function') {
         // can't be typesafe

@@ -1,9 +1,10 @@
 /**
  * ブローカーモックの単体テスト
  */
+
 import {describe, test, expect, beforeEach, afterEach} from 'vitest';
 import {MockBroker} from '../mocks/broker.mock';
-import type {TaskOptions, TaskPayload, TaskHandlerResult} from '../../types';
+import type {TaskOptions, TaskPayload, TaskHandlerResult, TaskName} from '../../types';
 import {generateTaskId} from '../../utils';
 
 describe('MockBroker 単体テスト', () => {
@@ -37,7 +38,7 @@ describe('MockBroker 単体テスト', () => {
   // タスク発行テスト
   test('タスク発行と取得', async () => {
     // タスク発行
-    const taskName = 'testTask';
+    const taskName = 'testTask' as TaskName;
     const args = [1, 2, 3];
     const options: TaskOptions = {priority: 10};
     const taskId = generateTaskId();
@@ -73,7 +74,7 @@ describe('MockBroker 単体テスト', () => {
     };
 
     // コンシューマー登録
-    const queueName = 'testQueue';
+    const queueName = 'testQueue' as TaskName;
     const consumerTag = await broker.consumeTask(queueName, taskHandler);
 
     // コンシューマータグが文字列であること
@@ -106,7 +107,7 @@ describe('MockBroker 単体テスト', () => {
     };
 
     // コンシューマー登録
-    const queueName = 'testQueue';
+    const queueName = 'testQueue' as TaskName;
     const consumerTag = await broker.consumeTask(queueName, taskHandler);
 
     // コンシューマーをキャンセル
@@ -129,11 +130,11 @@ describe('MockBroker 単体テスト', () => {
 
     const taskId = generateTaskId();
     // 未接続状態でタスク発行するとエラーになるはず
-    await expect(() => broker.publishTask(taskId, 'test', [1])).rejects.toThrowError('Broker is not connected');
+    await expect(() => broker.publishTask(taskId, 'test' as TaskName, [1])).rejects.toThrowError('Broker is not connected');
 
     // 未接続状態でコンシューマー登録するとエラーになるはず
     await expect(() =>
-      broker.consumeTask('test', async (t: TaskPayload): Promise<TaskHandlerResult> => {
+      broker.consumeTask('test' as TaskName, async (t: TaskPayload): Promise<TaskHandlerResult> => {
         await Promise.resolve();
         // テストのためのダミーハンドラ（実際には呼ばれない）
         return {
@@ -155,13 +156,13 @@ describe('MockBroker 単体テスト', () => {
 
     // タスク発行するとエラーになるはず
     const taskIdx = generateTaskId();
-    await expect(() => broker.publishTask(taskIdx, 'test', [1])).rejects.toThrowError('Failed to publish task');
+    await expect(() => broker.publishTask(taskIdx, 'test' as TaskName, [1])).rejects.toThrowError('Failed to publish task');
 
     // 失敗フラグを解除
     broker.setShouldFailPublish(false);
 
     // 正常にパブリッシュできるようになるはず
     const taskIdy = generateTaskId();
-    await broker.publishTask(taskIdy, 'test', [1]);
+    await broker.publishTask(taskIdy, 'test' as TaskName, [1]);
   });
 });

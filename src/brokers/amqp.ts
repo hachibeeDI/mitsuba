@@ -4,7 +4,7 @@
 import type {Channel, ChannelModel, Options, Replies} from 'amqplib';
 import {connect} from 'amqplib';
 
-import {type Broker, type TaskId, type TaskOptions, type TaskPayload, type TaskHandlerResult, isTaskPayload} from '../types';
+import {type Broker, type TaskId, type TaskOptions, type TaskPayload, type TaskHandlerResult, isTaskPayload, type TaskName} from '../types';
 import {BrokerConnectionError, BrokerError} from '../errors';
 import {getLogger} from '../logger';
 import {jsonSafeParse} from '../helpers';
@@ -139,7 +139,7 @@ export class AMQPBroker implements Broker {
    * @returns タスクID
    * @throws ブローカーに接続していない場合
    */
-  async publishTask(taskId: TaskId, taskName: string, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId> {
+  async publishTask(taskId: TaskId, taskName: TaskName, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId> {
     await this.ensureConnection();
     if (!this.channel) {
       throw new BrokerConnectionError('Channel is not connected');

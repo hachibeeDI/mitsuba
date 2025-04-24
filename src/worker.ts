@@ -1,7 +1,7 @@
 /**
  * Mitsuba ワーカープール実装
  */
-import type {Broker, Backend, TaskPayload} from './types';
+import type {Broker, Backend, TaskPayload, TaskName} from './types';
 import {WorkerPoolState} from './types';
 import {WorkerOperationError} from './errors';
 import {getLogger} from './logger';
@@ -57,7 +57,7 @@ export class WorkerPool {
    * ブローカーから受信したタスクはこのキューに追加され、
    * ワーカーマネージャーによって順次処理される
    */
-  private taskQueue: Queue<{taskName: string; payload: TaskPayload}> = new Queue();
+  private taskQueue: Queue<{taskName: TaskName; payload: TaskPayload}> = new Queue();
 
   /**
    * 現在処理中のタスクのIDセット
@@ -80,7 +80,7 @@ export class WorkerPool {
    * @param taskNames - 処理するタスク名の配列
    * @param concurrency - 各タスク名ごとの並行処理数 --- AIは何度教えてもNodeの並列APIを理解できないみたいなので現在は未対応
    */
-  async start(taskNames: ReadonlyArray<string>, concurrency = 1): Promise<void> {
+  async start(taskNames: ReadonlyArray<TaskName>, concurrency = 1): Promise<void> {
     if (this.state === WorkerPoolState.RUNNING || this.state === WorkerPoolState.STOPPING) {
       throw new WorkerOperationError(`Cannot start worker pool in ${this.state} state`);
     }
@@ -108,7 +108,7 @@ export class WorkerPool {
    * タスクコンシューマーをセットアップ
    * 特定のタスク名に対するリスナーを登録し、consumerTagsマップに保存する
    */
-  private async setupTaskConsumer(taskName: string): Promise<string> {
+  private async setupTaskConsumer(taskName: TaskName): Promise<string> {
     const workerId = `worker-${taskName}-${Date.now()}`;
 
     try {
@@ -143,7 +143,7 @@ export class WorkerPool {
   private async startWorkerManager(signal: AbortSignal): Promise<void> {
     this.taskQueue.listen((queue) => {
       this.logger.debug('Enqueue detected');
-      let task: {taskName: string; payload: TaskPayload} | undefined;
+      let task: {taskName: TaskName; payload: TaskPayload} | undefined;
       do {
         task = queue.dequeue();
         if (task != null) {
@@ -162,7 +162,7 @@ export class WorkerPool {
    * @param taskName - タスク名
    * @param payload - タスクペイロード
    */
-  private async processTask(taskName: string, payload: TaskPayload) {
+  private async processTask(taskName: TaskName, payload: TaskPayload) {
     const taskId = payload.id;
 
     // タスク処理中にマーク

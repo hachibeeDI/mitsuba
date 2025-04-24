@@ -4,6 +4,9 @@ import type {LogLevel} from './logger';
 
 export type Branded<T, Brand> = T & {readonly __brand: Brand};
 
+export type TaskId = Branded<string, '--task-id--'>;
+export type TaskName = Branded<string, '--task-name--'>;
+
 /** No options works so far. */
 export type TaskOptions = {
   /** */
@@ -32,8 +35,6 @@ export type TaskOptions = {
 };
 
 export type TaskStatus = 'PENDING' | 'STARTED' | 'SUCCESS' | 'FAILURE' | 'RETRY';
-
-export type TaskId = Branded<string, '--task-id--'>;
 
 /** */
 export type TaskResult<T> = {status: 'success'; value: T} | {status: 'failure'; error: Error; retryCount?: undefined | number};
@@ -103,13 +104,13 @@ export type Broker = {
   /**
    * Producer asks worker to process the task
    */
-  publishTask(taskId: TaskId, taskName: string, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId>;
+  publishTask(taskId: TaskId, taskName: TaskName, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId>;
   /**
    * Workers will consume task
    * @param taskName
    * @param handler
    */
-  consumeTask(taskName: string, handler: (task: TaskPayload) => Promise<TaskHandlerResult>): Promise<string>;
+  consumeTask(taskName: TaskName, handler: (task: TaskPayload) => Promise<TaskHandlerResult>): Promise<string>;
   cancelConsumer(consumerTag: string): Promise<void>;
 };
 
@@ -149,7 +150,7 @@ export type WorkerPoolState = (typeof WorkerPoolState)[keyof typeof WorkerPoolSt
 /** タスク実行情報 */
 export interface TaskPayload {
   id: TaskId;
-  taskName: string;
+  taskName: TaskName;
   args: ReadonlyArray<unknown>;
   options?: TaskOptions | undefined;
 }

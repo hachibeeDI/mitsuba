@@ -3,7 +3,7 @@
  */
 import {v4 as uuidv4} from 'uuid';
 import {EventEmitter} from 'node:events';
-import type {Broker, TaskPayload, TaskOptions, TaskId, TaskHandlerResult} from '../../types';
+import type {Broker, TaskPayload, TaskOptions, TaskId, TaskHandlerResult, TaskName} from '../../types';
 
 // 型安全なハンドラー定義
 type TaskHandler = (task: TaskPayload) => Promise<TaskHandlerResult>;
@@ -39,7 +39,7 @@ export class MockBroker implements Broker {
     this.messageQueue.removeAllListeners('task');
   }
 
-  async publishTask(taskId: TaskId, taskName: string, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId> {
+  async publishTask(taskId: TaskId, taskName: TaskName, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId> {
     await Promise.resolve();
 
     if (!this.connected) {
@@ -65,7 +65,7 @@ export class MockBroker implements Broker {
     return taskId;
   }
 
-  async consumeTask(queueName: string, handler: TaskHandler): Promise<string> {
+  async consumeTask(taskName: TaskName, handler: TaskHandler): Promise<string> {
     await Promise.resolve();
 
     if (!this.connected) {
@@ -73,12 +73,12 @@ export class MockBroker implements Broker {
     }
 
     const consumerTag = uuidv4();
-    this.handlers.set(queueName, handler);
-    this.consumerTags.set(consumerTag, queueName);
+    this.handlers.set(taskName, handler);
+    this.consumerTags.set(consumerTag, taskName);
 
     // メッセージキューからタスクを受信
     this.messageQueue.on('task', async (payload: TaskPayload) => {
-      if (payload.taskName === queueName) {
+      if (payload.taskName === taskName) {
         try {
           // タスク実行
           const handlerResult = await handler(payload);
