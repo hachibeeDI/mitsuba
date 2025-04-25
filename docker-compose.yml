@@ -19,6 +19,20 @@ services:
     command: >
       bash -c "rabbitmq-plugins enable rabbitmq_prometheus && rabbitmq-server"
 
+  # ElasticMQ - SQSローカルエミュレーター
+  elasticmq:
+    image: softwaremill/elasticmq
+    ports:
+      - "9324:9324"  # SQS protocol port
+      - "9325:9325"  # Management UI port (if available)
+    volumes:
+      - ./src/tests/e2e/config/elasticmq.conf:/opt/elasticmq.conf
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9324"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
   # E2Eテスト用ワーカープロセス
   worker:
     build:
