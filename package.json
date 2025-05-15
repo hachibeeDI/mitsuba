@@ -76,6 +76,7 @@
   },
   "dependencies": {
     "amqplib": "^0.10.7",
+    "sqs-consumer": "^12.0.0",
     "uuid": "^11.1.0"
   },
   "ts-node": {
