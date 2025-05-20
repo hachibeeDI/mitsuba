@@ -36,11 +36,11 @@ export type SQSBrokerOptions = {
    */
   queueAttributes?: Partial<Record<QueueAttributeName, string>> | undefined;
   /** バッチサイズ(一度に処理するメッセージ数) */
-  batchSize?: number;
+  batchSize?: number | undefined;
   /** ビジビリティタイムアウト(秒) - 他のコンシューマーから見えなくなる時間 */
-  visibilityTimeout?: number;
+  visibilityTimeout?: number | undefined;
   /** 待機時間(秒) - ロングポーリングの待機時間 */
-  waitTimeSeconds?: number;
+  waitTimeSeconds?: number | undefined;
   /** AWS認証情報 */
   credentials?: {
     accessKeyId: string;
@@ -106,9 +106,9 @@ export class SQSBroker implements Broker {
   constructor(projectName: string, options: SQSBrokerOptions) {
     this.projectName = projectName;
     this.options = {
-      batchSize: options.batchSize || 10,
-      visibilityTimeout: options.visibilityTimeout || 30,
-      waitTimeSeconds: options.waitTimeSeconds || 20,
+      batchSize: options.batchSize,
+      visibilityTimeout: options.visibilityTimeout,
+      waitTimeSeconds: options.waitTimeSeconds,
 
       ...options,
 
@@ -270,9 +270,9 @@ export class SQSBroker implements Broker {
       // It's true by default, but I'd like to set it explicitly
       shouldDeleteMessages: true,
       sqs: client,
-      batchSize: this.options.batchSize,
-      visibilityTimeout: this.options.visibilityTimeout,
-      waitTimeSeconds: this.options.waitTimeSeconds,
+      batchSize: this.options.batchSize || 10,
+      visibilityTimeout: this.options.visibilityTimeout || 30,
+      waitTimeSeconds: this.options.waitTimeSeconds || 20,
       attributeNames: ['All'],
       messageAttributeNames: ['All'],
     });
