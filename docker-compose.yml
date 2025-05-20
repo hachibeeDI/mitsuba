@@ -16,8 +16,18 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 15s
     command: >
       bash -c "rabbitmq-plugins enable rabbitmq_prometheus && rabbitmq-server"
+
+  # ElasticMQ - SQSローカルエミュレーター
+  elasticmq:
+    image: softwaremill/elasticmq
+    ports:
+      - "9324:9324"  # SQS protocol port
+      - "9325:9325"  # Management UI port (if available)
+    volumes:
+      - ./src/tests/e2e/config/elasticmq.conf:/opt/elasticmq.conf
 
   # E2Eテスト用ワーカープロセス
   worker:
@@ -28,7 +38,8 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+      - BROKER_URL=amqp://guest:guest@rabbitmq:5672
+      - BACKEND_URL=amqp://guest:guest@rabbitmq:5672
       - WORKER_ID=worker-1
       - CONCURRENCY=3
       - APP_NAME=e2e-test-worker
@@ -43,9 +54,27 @@ services:
       rabbitmq:
         condition: service_healthy
     environment:
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+      - BROKER_URL=amqp://guest:guest@rabbitmq:5672
+      - BACKEND_URL=amqp://guest:guest@rabbitmq:5672
       - WORKER_ID=worker-2
       - CONCURRENCY=2
+      - APP_NAME=e2e-test-worker
+    restart: unless-stopped
+
+  sqs-worker:
+    build:
+      context: .
+      dockerfile: src/tests/e2e/workers/Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      elasticmq:
+        condition: service_started
+    environment:
+      - BROKER_URL=sqs://elasticmq:9324
+      - BACKEND_URL=amqp://guest:guest@rabbitmq:5672
+      - WORKER_ID=sqs-worker
+      - CONCURRENCY=1
       - APP_NAME=e2e-test-worker
     restart: unless-stopped
 

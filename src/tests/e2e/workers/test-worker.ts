@@ -5,33 +5,19 @@
 
 import {createApp} from '../shared/task-definitions';
 
-const RABBITMQ_URL = process.env.RABBITMQ_URL || 'amqp://guest:guest@rabbitmq:5672';
+const BROKER_URL = process.env.BROKER_URL ?? '!!!!undefined!!!!!';
+const BACKEND_URL = process.env.BACKEND_URL ?? '!!!!undefined!!!!!';
 const WORKER_ID = process.env.WORKER_ID || 'worker-1';
 const CONCURRENCY = Number.parseInt(process.env.CONCURRENCY || '3', 10);
-
-/**
- * 環境変数のバリデーション
- */
-function validateEnvironment() {
-  if (Number.isNaN(CONCURRENCY) || CONCURRENCY <= 0) {
-    throw new Error(`無効なCONCURRENCY値: ${process.env.CONCURRENCY}`);
-  }
-
-  if (!RABBITMQ_URL.startsWith('amqp://')) {
-    throw new Error(`無効なRABBITMQ_URL: ${RABBITMQ_URL}`);
-  }
-}
 
 /**
  * ワーカープロセスを起動する
  */
 async function startWorker() {
   console.log(`Starting worker ${WORKER_ID} with concurrency ${CONCURRENCY}...`);
+  console.log(`BROKER_URL=${BROKER_URL}`, `BACKEND_URL=${BACKEND_URL}`);
 
-  // 環境変数の検証
-  validateEnvironment();
-
-  const {app, worker} = createApp(RABBITMQ_URL, RABBITMQ_URL);
+  const {app, worker} = createApp(BROKER_URL, BACKEND_URL);
   await app.init();
 
   try {

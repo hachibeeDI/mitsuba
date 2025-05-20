@@ -2,6 +2,13 @@
  * Mitsuba E2Eテスト
  * 実際のRabbitMQサーバーを使用したEnd-to-Endテスト
  * 別コンテナで実行されるワーカープロセスと連携して実施
+ *
+ * - to test SQS broker
+ *   BACKEND_URL="amqp://guest:guest@localhost:5672" BROKER_URL="sqs://localhost:9324" npx vitest run src/tests/e2e
+ * - to test RabbitMQ broker
+ *   BACKEND_URL="amqp://guest:guest@localhost:5672" BROKER_URL="amqp://guest:guest@localhost:5672" npx vitest run src/tests/e2e
+ *
+ * TODO: decent test run configuration and CI
  */
 
 import {describe, test, expect, beforeAll, afterAll} from 'vitest';
@@ -9,15 +16,18 @@ import {describe, test, expect, beforeAll, afterAll} from 'vitest';
 import type {Mitsuba} from '../../index';
 import {createApp} from './shared/task-definitions';
 
-// テスト用のRabbitMQ接続情報（ローカルマシンから接続）
-const RABBITMQ_URL = 'amqp://guest:guest@localhost:5672';
+const BROKER_URL = process.env.BROKER_URL || 'amqp://guest:guest@rabbitmq:5672';
+const BACKEND_URL = process.env.BACKEND_URL || 'amqp://guest:guest@rabbitmq:5672';
+
+console.log('broker url', BROKER_URL);
+console.log('backend url', BACKEND_URL);
 
 describe('Mitsuba E2Eテスト', () => {
   let mitsuba: Mitsuba;
   let tasks: ReturnType<typeof createApp>['tasks'];
 
   beforeAll(async () => {
-    const {app, tasks: mitsubaTasks} = createApp(RABBITMQ_URL, RABBITMQ_URL);
+    const {app, tasks: mitsubaTasks} = createApp(BROKER_URL, BACKEND_URL);
     mitsuba = app;
     tasks = mitsubaTasks;
 

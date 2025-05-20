@@ -91,7 +91,7 @@ export class AMQPBroker implements Broker {
 
       this.logger.info('Successfully connected to AMQP broker');
     } catch (error) {
-      this.logger.error('Failed to connect to AMQP broker:', error);
+      this.logger.error(`Failed to connect to AMQP broker: url=${this.url}`, error);
       throw new BrokerError('Failed to connect to AMQP broker', {cause: error});
     }
   }
