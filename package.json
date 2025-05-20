@@ -31,10 +31,13 @@
     "fix:lint": "npm run check:lint -- --fix",
     "fix:style": "npm run check:style -- --write",
     "fix-all": "npm run fix:style && npm run fix:lint",
+
     "build": "npm run build:cjs && npm run build:esm",
     "build:cjs": "tsc -p tsconfig.cjs.json",
     "build:esm": "tsc -p tsconfig.mjs.json",
+
     "prepublish": "npm run build",
+
     "e2e:setup": "docker compose up -d rabbitmq worker worker-2",
     "e2e:status": "docker compose ps",
     "e2e:logs": "docker compose logs",
@@ -44,6 +47,7 @@
     "e2e:clean": "docker compose down -v",
     "e2e:rebuild": "docker compose build worker worker-2 sqs-worker",
     "e2e:run": "npm run e2e:setup && echo \"Waiting for services to start...\" && sleep 10",
+
     "pretest": "npm run e2e:run && npm run test:e2e && npm run e2e:clean",
     "test": "vitest run",
     "test:unit": "vitest run src/tests/unit",

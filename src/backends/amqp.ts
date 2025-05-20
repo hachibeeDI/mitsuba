@@ -44,6 +44,7 @@ export class AMQPBackend implements Backend {
   constructor(url: string, projectName: string) {
     this.url = url;
     this.exchange = `${projectName}.result` as const;
+    this.logger.debug(`AMQPBackend initialized with URL=${url}, exchange=${this.exchange}`);
   }
 
   /**
@@ -56,12 +57,14 @@ export class AMQPBackend implements Backend {
     }
 
     try {
+      this.logger.info(`Connecting to AMQP backend at ${this.url}, exchange=${this.exchange}`);
       this.connection = await connect(this.url);
       this.channel = await this.connection.createChannel();
 
       // 結果交換機を定義（direct型）
       await this.channel.assertExchange(this.exchange, 'direct', {durable: true});
     } catch (error) {
+      this.logger.error(`Failed to connect to AMQP backend: ${this.url}`, error);
       this.cleanupConnection();
       throw new BackendConnectionError('Failed to establish connection', {
         cause: error instanceof Error ? error : new Error(String(error)),

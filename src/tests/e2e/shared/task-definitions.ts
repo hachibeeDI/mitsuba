@@ -102,32 +102,38 @@ export const testTasks = {
   },
 } as const;
 
-function createBroker(url: string) {
+function createBroker(url: string, projectName: string) {
   if (url.startsWith('amqp://')) {
-    return new AMQPBroker('mitsuba-test-client', url);
+    return new AMQPBroker(projectName, url);
   }
   if (url.startsWith('sqs://')) {
     // sqs://hostname:port 形式からエンドポイントURLに変換
     const endpoint = url.replace('sqs://', 'http://');
-    return new SQSBroker('mitsuba-test-client', {
+    return new SQSBroker(projectName, {
       region: 'ap-northeast-1',
       endpoint: endpoint,
+      // ElasticMQ用のダミー認証情報（なんでもいい）を追加
+      credentials: {
+        accessKeyId: 'dummy-access-key',
+        secretAccessKey: 'dummy-secret-key',
+      },
     });
   }
   throw new Error(`Unsupported broker URL: ${url}`);
 }
 
-function createBackend(url: string) {
+function createBackend(url: string, projectName: string) {
   if (url.startsWith('amqp://')) {
-    return new AMQPBackend(url, 'mitsuba-test-client');
+    return new AMQPBackend(url, projectName);
   }
   throw new Error(`Unsupported backend URL: ${url}`);
 }
 
 export function createApp(broker: string, backend: string) {
-  const app = new Mitsuba('e2e-test-client', {
-    broker: createBroker(broker),
-    backend: createBackend(backend),
+  const projectName = 'e2e_test_client';
+  const app = new Mitsuba(projectName, {
+    broker: createBroker(broker, projectName),
+    backend: createBackend(backend, projectName),
     logger: {
       level: 0,
     },

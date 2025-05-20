@@ -12,6 +12,9 @@ import {createApp} from './shared/task-definitions';
 const BROKER_URL = process.env.BROKER_URL || 'amqp://guest:guest@rabbitmq:5672';
 const BACKEND_URL = process.env.BACKEND_URL || 'amqp://guest:guest@rabbitmq:5672';
 
+console.log('broker url', BROKER_URL);
+console.log('backend url', BACKEND_URL);
+
 describe('Mitsuba E2Eテスト', () => {
   let mitsuba: Mitsuba;
   let tasks: ReturnType<typeof createApp>['tasks'];
