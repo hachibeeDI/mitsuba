@@ -126,8 +126,7 @@ export class SQSBroker implements Broker {
   }
 
   /**
-   * ブローカーに接続
-   * @throws 接続に失敗した場合
+   * @throws [BrokerConnectionError] 接続に失敗した場合
    */
   async connect(): Promise<void> {
     if (this.client) {
@@ -139,7 +138,7 @@ export class SQSBroker implements Broker {
       this.client = new SQSClient(this.options);
     } catch (error) {
       this.logger.error('Failed to connect to SQS broker:', error);
-      throw new BrokerError('Failed to connect to SQS broker', {cause: error});
+      throw new BrokerConnectionError('Failed to connect to SQS broker', {cause: error});
     }
 
     // SQSClientの接続テスト - 空のリクエストを送信して接続を確認
@@ -158,7 +157,6 @@ export class SQSBroker implements Broker {
   }
 
   /**
-   * ブローカーとの接続を切断
    */
   async disconnect(): Promise<void> {
     await Promise.allSettled(Array.from(this.consumers.keys()).map((tag) => this.cancelConsumer(tag)));
@@ -232,14 +230,17 @@ export class SQSBroker implements Broker {
 
     const consumer = Consumer.create({
       queueUrl,
-      // FIXME: Needs to be clean code
+      /**
+       * @note
+       *   Throwing an error (or returning a rejected promise) from the handler function will cause the message to be left on the queue. An SQS redrive policy can be used to move messages that cannot be processed to a dead letter queue.
+       *   https://www.npmjs.com/package/sqs-consumer
+       */
       handleMessage: async (message) => {
         if (!message.Body) {
           this.logger.warn(`Received message without body from queue ${taskName}`);
           return;
         }
 
-        // メッセージをJSONとしてパース
         const content = jsonSafeParse(message.Body);
 
         if (content.kind === 'failure') {
@@ -254,23 +255,25 @@ export class SQSBroker implements Broker {
           throw new Error('Invalid task payload');
         }
 
+        let handlerResult: TaskHandlerResult;
         try {
-          const handlerResult = await handler(content.value);
-          this.logger.debug(`Task handled result="${JSON.stringify(handlerResult)}"`);
-
-          if (handlerResult.status === 'rejected') {
-            this.logger.warn(`Task rejected: ${handlerResult.reason}`);
-            // タスク拒否時は、明示的な削除をせず、SQSのデッドレターキューポリシーに任せる
-            throw new Error(`Task rejected: ${handlerResult.reason}`);
-          }
-
-          // 正常処理の場合はメッセージ削除は自動で行われる
+          handlerResult = await handler(content.value);
         } catch (error) {
           this.logger.error('Error processing task:', error);
           // エラー時はメッセージを削除せず、SQSの再配送メカニズムに任せる
           throw error;
         }
+
+        this.logger.debug(`Task handled result="${JSON.stringify(handlerResult)}"`);
+
+        if (handlerResult.status === 'rejected') {
+          this.logger.warn(`Task rejected: ${handlerResult.reason}`);
+          // タスク拒否時は、明示的な削除をせず、SQSのデッドレターキューポリシーに任せる
+          throw new Error(`Task rejected: ${handlerResult.reason}`);
+        }
       },
+      // It's true by default, but I'd like to set it explicitly
+      shouldDeleteMessages: true,
       sqs: client,
       batchSize: this.options.batchSize,
       visibilityTimeout: this.options.visibilityTimeout,
