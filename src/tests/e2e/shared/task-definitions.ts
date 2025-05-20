@@ -4,7 +4,6 @@
  */
 
 import {Mitsuba} from '../../..';
-import type {Backend, Broker} from '../../../types';
 import {AMQPBackend} from '../../../backends/amqp';
 import {AMQPBroker} from '../../../brokers/amqp';
 import {SQSBroker} from '../../../brokers/sqs';
@@ -108,9 +107,11 @@ function createBroker(url: string) {
     return new AMQPBroker('mitsuba-test-client', url);
   }
   if (url.startsWith('sqs://')) {
+    // sqs://hostname:port 形式からエンドポイントURLに変換
+    const endpoint = url.replace('sqs://', 'http://');
     return new SQSBroker('mitsuba-test-client', {
       region: 'ap-northeast-1',
-      endpoint: url,
+      endpoint: endpoint,
     });
   }
   throw new Error(`Unsupported broker URL: ${url}`);
@@ -118,7 +119,7 @@ function createBroker(url: string) {
 
 function createBackend(url: string) {
   if (url.startsWith('amqp://')) {
-    return new AMQPBackend('mitsuba-test-client', url);
+    return new AMQPBackend(url, 'mitsuba-test-client');
   }
   throw new Error(`Unsupported backend URL: ${url}`);
 }

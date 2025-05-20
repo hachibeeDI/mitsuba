@@ -5,8 +5,8 @@
 
 import {createApp} from '../shared/task-definitions';
 
-const BROKER_URL = process.env.BROKER_URL || 'amqp://guest:guest@rabbitmq:5672';
-const BACKEND_URL = process.env.BACKEND_URL || 'amqp://guest:guest@rabbitmq:5672';
+const BROKER_URL = process.env.BROKER_URL ?? '!!!!undefined!!!!!';
+const BACKEND_URL = process.env.BACKEND_URL ?? '!!!!undefined!!!!!';
 const WORKER_ID = process.env.WORKER_ID || 'worker-1';
 const CONCURRENCY = Number.parseInt(process.env.CONCURRENCY || '3', 10);
 
@@ -15,6 +15,7 @@ const CONCURRENCY = Number.parseInt(process.env.CONCURRENCY || '3', 10);
  */
 async function startWorker() {
   console.log(`Starting worker ${WORKER_ID} with concurrency ${CONCURRENCY}...`);
+  console.log(`BROKER_URL=${BROKER_URL}`, `BACKEND_URL=${BACKEND_URL}`);
 
   const {app, worker} = createApp(BROKER_URL, BACKEND_URL);
   await app.init();

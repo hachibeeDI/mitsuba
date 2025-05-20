@@ -16,6 +16,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 15s
     command: >
       bash -c "rabbitmq-plugins enable rabbitmq_prometheus && rabbitmq-server"
 
@@ -27,11 +28,6 @@ services:
       - "9325:9325"  # Management UI port (if available)
     volumes:
       - ./src/tests/e2e/config/elasticmq.conf:/opt/elasticmq.conf
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9324"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
 
   # E2Eテスト用ワーカープロセス
   worker:
@@ -72,9 +68,10 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+      elasticmq:
+        condition: service_started
     environment:
       - BROKER_URL=sqs://elasticmq:9324
-      # TODO: redis backend should be better even if for testing usage?
       - BACKEND_URL=amqp://guest:guest@rabbitmq:5672
       - WORKER_ID=sqs-worker
       - CONCURRENCY=1
