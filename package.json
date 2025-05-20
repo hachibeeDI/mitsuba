@@ -50,11 +50,15 @@
 
     "pretest": "npm run e2e:run && npm run test:e2e && npm run e2e:clean",
     "test": "vitest run",
+
     "test:unit": "vitest run src/tests/unit",
     "test:integration": "vitest run src/tests/integration",
+    "test:e2e:sqs": "BACKEND_URL=amqp://guest:guest@localhost:5672 BROKER_URL=sqs://localhost:9324 npx vitest run src/tests/e2e",
+    "test:e2e:rabbitmq": "BACKEND_URL=amqp://guest:guest@localhost:5672 BROKER_URL=amqp://guest:guest@localhost:5672 npx vitest run src/tests/e2e",
+    "test:e2e": "npm run test:e2e:sqs; npm run test:e2e:rabbitmq",
+
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
-    "test:e2e": "npm run e2e:run && vitest run src/tests/e2e"
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "celery",
