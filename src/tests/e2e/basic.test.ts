@@ -2,13 +2,6 @@
  * Mitsuba E2Eテスト
  * 実際のRabbitMQサーバーを使用したEnd-to-Endテスト
  * 別コンテナで実行されるワーカープロセスと連携して実施
- *
- * - to test SQS broker
- *   BACKEND_URL="amqp://guest:guest@localhost:5672" BROKER_URL="sqs://localhost:9324" npx vitest run src/tests/e2e
- * - to test RabbitMQ broker
- *   BACKEND_URL="amqp://guest:guest@localhost:5672" BROKER_URL="amqp://guest:guest@localhost:5672" npx vitest run src/tests/e2e
- *
- * TODO: decent test run configuration and CI
  */
 
 import {describe, test, expect, beforeAll, afterAll} from 'vitest';

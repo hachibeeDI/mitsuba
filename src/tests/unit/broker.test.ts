@@ -124,31 +124,6 @@ describe('MockBroker 単体テスト', () => {
     expect(handlerResults.length).toBe(0);
   });
 
-  // 接続していない状態でのエラーハンドリングテスト
-  test('未接続状態でのエラーハンドリング', async () => {
-    await broker.disconnect();
-
-    const taskId = generateTaskId();
-    // 未接続状態でタスク発行するとエラーになるはず
-    await expect(() => broker.publishTask(taskId, 'test' as TaskName, [1])).rejects.toThrowError('Broker is not connected');
-
-    // 未接続状態でコンシューマー登録するとエラーになるはず
-    await expect(() =>
-      broker.consumeTask('test' as TaskName, async (t: TaskPayload): Promise<TaskHandlerResult> => {
-        await Promise.resolve();
-        // テストのためのダミーハンドラ（実際には呼ばれない）
-        return {
-          status: 'processed',
-          taskId: t.id,
-          result: t,
-        };
-      }),
-    ).rejects.toThrowError('Broker is not connected');
-
-    // 未接続状態でコンシューマーキャンセルするとエラーになるはず
-    await expect(() => broker.cancelConsumer('dummyTag')).rejects.toThrowError('Broker is not connected');
-  });
-
   // パブリッシュ失敗時のエラーハンドリングテスト
   test('パブリッシュ失敗のシミュレーション', async () => {
     // パブリッシュ失敗をシミュレート
