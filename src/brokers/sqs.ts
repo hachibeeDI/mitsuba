@@ -1,13 +1,7 @@
 /**
  * SQS ブローカー実装
  */
-import {
-  SQSClient,
-  SendMessageCommand,
-  CreateQueueCommand,
-  GetQueueUrlCommand,
-  type GetQueueUrlCommandOutput,
-} from '@aws-sdk/client-sqs';
+import {SQSClient, SendMessageCommand, CreateQueueCommand, GetQueueUrlCommand, type GetQueueUrlCommandOutput} from '@aws-sdk/client-sqs';
 import {Consumer} from 'sqs-consumer';
 import {v4 as uuidv4} from 'uuid';
 

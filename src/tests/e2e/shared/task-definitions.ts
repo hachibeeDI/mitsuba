@@ -4,6 +4,7 @@
  */
 
 import {Mitsuba} from '../../..';
+import type {Backend, Broker} from '../../../types';
 
 export const testTasks = {
   // 基本的なタスク
@@ -99,7 +100,7 @@ export const testTasks = {
   },
 } as const;
 
-export function createApp(broker: string, backend: string) {
+export function createApp(broker: string | Broker, backend: string | Backend) {
   const app = new Mitsuba('e2e-test-client', {
     broker,
     backend,
