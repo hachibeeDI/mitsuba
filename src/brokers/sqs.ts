@@ -26,6 +26,8 @@ import {BrokerConnectionError, BrokerError} from '../errors';
 import {getLogger} from '../logger';
 import {jsonSafeParse} from '../helpers';
 
+const PROJECT_DELIMITTER = '__';
+
 export type SQSBrokerOptions = {
   /** カスタムエンドポイント */
   endpoint: string;
@@ -141,7 +143,7 @@ export class SQSBroker implements Broker {
     // たとえば、存在しない可能性のあるキューのURLを取得しようとする
     // エラーになっても接続自体は確立できているかを確認する
     try {
-      await this.client.send(new GetQueueUrlCommand({QueueName: `${this.projectName}.test-connection`}));
+      await this.client.send(new GetQueueUrlCommand({QueueName: `${this.projectName}${PROJECT_DELIMITTER}test-connection`}));
     } catch (_connectionTestError) {
       // FIXME: エラー内容による分岐が必要
       // キューが存在しないエラーは無視 - 接続自体はOK
@@ -176,12 +178,12 @@ export class SQSBroker implements Broker {
   async publishTask(taskId: TaskId, taskName: TaskName, args: ReadonlyArray<unknown>, options?: TaskOptions): Promise<TaskId> {
     const client = await this.ensureConnection();
 
-    const queueName = `${this.projectName}.${taskName}`;
+    const queueName = `${this.projectName}${PROJECT_DELIMITTER}${taskName}`;
     const queueUrl = await this.getQueueUrl(queueName);
     const payload: TaskPayload = options ? {id: taskId, taskName, args, options} : {id: taskId, taskName, args};
 
     try {
-      const command = new SendMessageCommand({
+      const commandOptions = {
         QueueUrl: queueUrl,
         MessageBody: JSON.stringify(payload),
         MessageAttributes: {
@@ -194,9 +196,18 @@ export class SQSBroker implements Broker {
             StringValue: taskName,
           },
         },
-        // 優先度は直接サポートされていないが、メッセージグループIDなどで実装可能
-        MessageDeduplicationId: taskId, // 重複排除ID (FIFO キューの場合)
-      });
+      };
+
+      // FIFOキューの場合のみ、MessageDeduplicationIdを設定
+      // FIFOキューの名前は.fifoで終わる
+      if (queueName.endsWith('.fifo')) {
+        Object.assign(commandOptions, {
+          MessageDeduplicationId: taskId, // 重複排除ID (FIFO キューの場合のみ)
+          MessageGroupId: taskName, // メッセージグループID (FIFO キューの場合のみ)
+        });
+      }
+
+      const command = new SendMessageCommand(commandOptions);
 
       await client.send(command);
       this.logger.debug(`Published task ${taskId} to queue ${queueName}`);
@@ -217,7 +228,7 @@ export class SQSBroker implements Broker {
   async consumeTask(taskName: TaskName, handler: (task: TaskPayload) => Promise<TaskHandlerResult>): Promise<string> {
     const client = await this.ensureConnection();
 
-    const queueName = `${this.projectName}.${taskName}`;
+    const queueName = `${this.projectName}${PROJECT_DELIMITTER}${taskName}`;
     const queueUrl = await this.getQueueUrl(queueName);
     const consumerTag = uuidv4();
 
