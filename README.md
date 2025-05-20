@@ -11,9 +11,9 @@ Celery inspired task queue system for TypeScript.
 2. Pluggable
 
    Task queue backend layer is pluggable, so users are able to choose that by their preference.
-   So far, amqp protocol (almost equals RabbitMQ) is only supported.
+   So far, amqp protocol and Amazon SQS is supported.
 
-   As next steps, we are going to support Amazon SQS and Redis.
+   As next steps, we are going to support Redis.
 
 3. Simple
 
@@ -103,6 +103,8 @@ async function main() {
 
 ## Todo
 
-- [ ] SQS Support
+- [x] SQS broker Support
+- [ ] Redis backend Support
 - [ ] Auto retry
 - [ ] mono repo
+
