@@ -65,5 +65,21 @@ services:
       - APP_NAME=e2e-test-worker
     restart: unless-stopped
 
+  sqs-worker:
+    build:
+      context: .
+      dockerfile: src/tests/e2e/workers/Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - BROKER_URL=sqs://elasticmq:9324
+      # TODO: redis backend should be better even if for testing usage?
+      - BACKEND_URL=amqp://guest:guest@rabbitmq:5672
+      - WORKER_ID=sqs-worker
+      - CONCURRENCY=1
+      - APP_NAME=e2e-test-worker
+    restart: unless-stopped
+
 volumes:
   rabbitmq_data: 

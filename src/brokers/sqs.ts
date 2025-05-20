@@ -1,7 +1,14 @@
 /**
  * SQS ブローカー実装
  */
-import {SQSClient, SendMessageCommand, CreateQueueCommand, GetQueueUrlCommand, type GetQueueUrlCommandOutput} from '@aws-sdk/client-sqs';
+import {
+  SQSClient,
+  SendMessageCommand,
+  CreateQueueCommand,
+  GetQueueUrlCommand,
+  type GetQueueUrlCommandOutput,
+  type QueueAttributeName,
+} from '@aws-sdk/client-sqs';
 import {Consumer} from 'sqs-consumer';
 import {v4 as uuidv4} from 'uuid';
 
@@ -18,6 +25,28 @@ import {
 import {BrokerConnectionError, BrokerError} from '../errors';
 import {getLogger} from '../logger';
 import {jsonSafeParse} from '../helpers';
+
+export type SQSBrokerOptions = {
+  /** カスタムエンドポイント */
+  endpoint: string;
+  /** AWS リージョン */
+  region: string;
+  /**
+   * キュー設定オプション
+   */
+  queueAttributes?: Partial<Record<QueueAttributeName, string>> | undefined;
+  /** バッチサイズ(一度に処理するメッセージ数) */
+  batchSize?: number;
+  /** ビジビリティタイムアウト(秒) - 他のコンシューマーから見えなくなる時間 */
+  visibilityTimeout?: number;
+  /** 待機時間(秒) - ロングポーリングの待機時間 */
+  waitTimeSeconds?: number;
+  /** AWS認証情報 */
+  credentials?: {
+    accessKeyId: string;
+    secretAccessKey: string;
+  };
+};
 
 async function getOrCreateQueue(
   client: SQSClient,
@@ -58,38 +87,11 @@ async function getOrCreateQueue(
   return response.QueueUrl;
 }
 
-export type SQSBrokerOptions = {
-  /** カスタムエンドポイント */
-  endpoint: string;
-  /** AWS リージョン */
-  region: string;
-  /**
-   * キュー設定オプション
-   * FIXME: needs to be type safe!
-   */
-  queueAttributes?: Record<string, string>;
-  /** バッチサイズ(一度に処理するメッセージ数) */
-  batchSize?: number;
-  /** ビジビリティタイムアウト(秒) - 他のコンシューマーから見えなくなる時間 */
-  visibilityTimeout?: number;
-  /** 待機時間(秒) - ロングポーリングの待機時間 */
-  waitTimeSeconds?: number;
-  /** AWS認証情報 */
-  credentials?: {
-    accessKeyId: string;
-    secretAccessKey: string;
-  };
-};
-
 export class SQSBroker implements Broker {
   private readonly projectName: string;
   private client: SQSClient | null = null;
   private readonly options: SQSBrokerOptions;
 
-  private readonly credentials?: {
-    accessKeyId: string;
-    secretAccessKey: string;
-  };
   private readonly logger = getLogger();
 
   /** コンシューマーマップ */
@@ -116,7 +118,6 @@ export class SQSBroker implements Broker {
         ...options.queueAttributes,
       },
     };
-    this.credentials = options.credentials;
   }
 
   /**

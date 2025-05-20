@@ -5,6 +5,9 @@
 
 import {Mitsuba} from '../../..';
 import type {Backend, Broker} from '../../../types';
+import {AMQPBackend} from '../../../backends/amqp';
+import {AMQPBroker} from '../../../brokers/amqp';
+import {SQSBroker} from '../../../brokers/sqs';
 
 export const testTasks = {
   // 基本的なタスク
@@ -100,10 +103,30 @@ export const testTasks = {
   },
 } as const;
 
-export function createApp(broker: string | Broker, backend: string | Backend) {
+function createBroker(url: string) {
+  if (url.startsWith('amqp://')) {
+    return new AMQPBroker('mitsuba-test-client', url);
+  }
+  if (url.startsWith('sqs://')) {
+    return new SQSBroker('mitsuba-test-client', {
+      region: 'ap-northeast-1',
+      endpoint: url,
+    });
+  }
+  throw new Error(`Unsupported broker URL: ${url}`);
+}
+
+function createBackend(url: string) {
+  if (url.startsWith('amqp://')) {
+    return new AMQPBackend('mitsuba-test-client', url);
+  }
+  throw new Error(`Unsupported backend URL: ${url}`);
+}
+
+export function createApp(broker: string, backend: string) {
   const app = new Mitsuba('e2e-test-client', {
-    broker,
-    backend,
+    broker: createBroker(broker),
+    backend: createBackend(backend),
     logger: {
       level: 0,
     },

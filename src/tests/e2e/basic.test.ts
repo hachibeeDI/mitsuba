@@ -9,15 +9,15 @@ import {describe, test, expect, beforeAll, afterAll} from 'vitest';
 import type {Mitsuba} from '../../index';
 import {createApp} from './shared/task-definitions';
 
-// テスト用のRabbitMQ接続情報（ローカルマシンから接続）
-const RABBITMQ_URL = 'amqp://guest:guest@localhost:5672';
+const BROKER_URL = process.env.BROKER_URL || 'amqp://guest:guest@rabbitmq:5672';
+const BACKEND_URL = process.env.BACKEND_URL || 'amqp://guest:guest@rabbitmq:5672';
 
 describe('Mitsuba E2Eテスト', () => {
   let mitsuba: Mitsuba;
   let tasks: ReturnType<typeof createApp>['tasks'];
 
   beforeAll(async () => {
-    const {app, tasks: mitsubaTasks} = createApp(RABBITMQ_URL, RABBITMQ_URL);
+    const {app, tasks: mitsubaTasks} = createApp(BROKER_URL, BACKEND_URL);
     mitsuba = app;
     tasks = mitsubaTasks;
 
