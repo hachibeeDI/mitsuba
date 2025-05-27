@@ -27,7 +27,7 @@ services:
       - "9324:9324"  # SQS protocol port
       - "9325:9325"  # Management UI port (if available)
     volumes:
-      - ./src/tests/e2e/config/elasticmq.conf:/opt/elasticmq.conf
+      - ./tests/e2e/config/elasticmq.conf:/opt/elasticmq.conf
     healthcheck:
       test: [ "CMD", "curl",  "--fail" , "http://localhost:9324/health" ]
 
@@ -35,7 +35,7 @@ services:
   worker:
     build:
       context: .
-      dockerfile: src/tests/e2e/workers/Dockerfile
+      dockerfile: tests/e2e/workers/Dockerfile
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -59,7 +59,7 @@ services:
   worker-2:
     build:
       context: .
-      dockerfile: src/tests/e2e/workers/Dockerfile
+      dockerfile: tests/e2e/workers/Dockerfile
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -81,7 +81,7 @@ services:
   sqs-worker:
     build:
       context: .
-      dockerfile: src/tests/e2e/workers/Dockerfile
+      dockerfile: tests/e2e/workers/Dockerfile
     depends_on:
       elasticmq:
         condition: service_healthy

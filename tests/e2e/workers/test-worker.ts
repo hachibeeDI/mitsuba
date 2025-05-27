@@ -3,7 +3,7 @@
  * Docker環境内で実行される独立したワーカープロセス
  */
 
-import {createApp} from '../shared/task-definitions';
+import {createApp} from '@tests/shared/task-definitions';
 
 const BROKER_URL = process.env.BROKER_URL ?? '!!!!undefined!!!!!';
 const BACKEND_URL = process.env.BACKEND_URL ?? '!!!!undefined!!!!!';

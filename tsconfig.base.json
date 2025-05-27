@@ -11,15 +11,11 @@
     "sourceMap": true,
     "baseUrl": ".",
     "paths": {
-      "@tests/shared": ["tests/shared"],
+      "@tests/shared/*": ["tests/shared/*"],
 
-      "@mitsuba/core": ["packages/core/src"],
       "@mitsuba/core/*": ["packages/core/src/*"],
-      "@mitsuba/amqp-broker": ["packages/amqp-broker/src"],
       "@mitsuba/amqp-broker/*": ["packages/amqp-broker/src/*"],
-      "@mitsuba/sqs-broker": ["packages/sqs-broker/src"],
       "@mitsuba/sqs-broker/*": ["packages/sqs-broker/src/*"],
-      "@mitsuba/amqp-backend": ["packages/amqp-backend/src"],
       "@mitsuba/amqp-backend/*": ["packages/amqp-backend/src/*"]
     },
     "jsx": "react-jsx",
