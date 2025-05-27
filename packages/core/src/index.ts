@@ -230,7 +230,18 @@ export type {
 export {unwrapResult, isTaskPayload} from './types'; // isTaskPayload moved here
 
 // Export errors
-export {MitsubaError, BrokerConnectionError, BrokerError, BackendConnectionError, TaskExecutionError, TaskRetrievalError, TaskTimeoutError, TaskRetryError, TaskNotRegisteredError, WorkerOperationError} from './errors';
+export {
+  MitsubaError,
+  BrokerConnectionError,
+  BrokerError,
+  BackendConnectionError,
+  TaskExecutionError,
+  TaskRetrievalError,
+  TaskTimeoutError,
+  TaskRetryError,
+  TaskNotRegisteredError,
+  WorkerOperationError,
+} from './errors';
 
 // Export logger
 export {getLogger, type Logger} from './logger'; // getLogger and Logger type
