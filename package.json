@@ -28,9 +28,9 @@
     "src"
   ],
   "scripts": {
-    "check:type": "tsc -p tsconfig.mjs.json --noEmit",
-    "check:lint": "biome lint tests/ --vcs-use-ignore-file=true",
-    "check:style": "biome format tests/ --vcs-use-ignore-file=true",
+    "check:type": "npm run --workspaces check:type",
+    "check:lint": "biome lint packages/ tests/ --vcs-use-ignore-file=true",
+    "check:style": "biome format packages/ tests/ --vcs-use-ignore-file=true",
     "check-all": "npm run check:type && npm run check:lint && npm run check:style",
     "fix:lint": "npm run check:lint -- --fix",
     "fix:style": "npm run check:style -- --write",
