@@ -29,11 +29,7 @@ services:
     volumes:
       - ./src/tests/e2e/config/elasticmq.conf:/opt/elasticmq.conf
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9324"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 5s
+      test: [ "CMD", "curl",  "--fail" , "http://localhost:9324/health" ]
 
   # E2Eテスト用ワーカープロセス
   worker:
@@ -87,8 +83,6 @@ services:
       context: .
       dockerfile: src/tests/e2e/workers/Dockerfile
     depends_on:
-      rabbitmq:
-        condition: service_healthy
       elasticmq:
         condition: service_healthy
     environment:
