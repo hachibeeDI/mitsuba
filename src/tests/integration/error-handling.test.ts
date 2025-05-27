@@ -3,10 +3,12 @@
  * 実際のRabbitMQサーバーは使用せず、同一プロセス内でワーカーとクライアントを統合テスト
  */
 
+import EventEmitter from 'node:events';
+
 import {describe, test, expect, beforeAll, afterAll} from 'vitest';
 import {Mitsuba} from '@mitsuba/core';
-import {testTasks} from '../e2e/shared/task-definitions';
-import EventEmitter from 'node:events';
+
+import {testTasks} from '@tests/e2e/shared/task-definitions';
 import {MockBroker} from '../mocks/broker.mock';
 import {MockBackend} from '../mocks/backend.mock';
 

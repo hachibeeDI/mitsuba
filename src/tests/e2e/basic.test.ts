@@ -7,7 +7,7 @@
 import {describe, test, expect, beforeAll, afterAll} from 'vitest';
 
 import type {Mitsuba} from '@mitsuba/core';
-import {createApp} from './shared/task-definitions';
+import {createApp} from '@tests/e2e/shared/task-definitions';
 
 const BROKER_URL = process.env.BROKER_URL || 'amqp://guest:guest@rabbitmq:5672';
 const BACKEND_URL = process.env.BACKEND_URL || 'amqp://guest:guest@rabbitmq:5672';
@@ -26,7 +26,7 @@ describe('Mitsuba E2Eテスト', () => {
 
     await mitsuba.init();
     console.log('E2Eテストクライアント初期化完了: RabbitMQ接続確立');
-  }, 30000); // 接続に時間がかかる場合を考慮
+  }, 5000);
 
   // テスト後に接続を閉じる
   afterAll(async () => {
@@ -44,7 +44,7 @@ describe('Mitsuba E2Eテスト', () => {
     console.log('result receivedd', result);
 
     expect(result).toBe(12);
-  }, 15000);
+  }, 5000);
 
   // 複数タスクの並列実行E2Eテスト
   test('複数タスクの並列実行 (E2E)', async () => {
@@ -65,7 +65,7 @@ describe('Mitsuba E2Eテスト', () => {
 
     // 直列実行の場合は少なくとも2500ms以上かかるはず
     // 注: この時間テストは環境依存であり、信頼性は低い
-  }, 20000);
+  }, 5000);
 
   // エラー処理のE2Eテスト
   test('タスクエラー処理 (E2E)', async () => {
@@ -79,7 +79,7 @@ describe('Mitsuba E2Eテスト', () => {
 
     // タスクのステータスが失敗になっていることを確認
     expect(task.getStatus()).toBe('FAILURE');
-  }, 15000);
+  }, 5000);
 
   // 大量のタスクを同時実行するE2Eテスト
   test('大量のタスク同時実行 (E2E)', async () => {
@@ -89,5 +89,5 @@ describe('Mitsuba E2Eテスト', () => {
     for (let i = 0; i < taskCount; i++) {
       expect(results).toContain(i + 1);
     }
-  }, 30000);
+  }, 5000);
 });
