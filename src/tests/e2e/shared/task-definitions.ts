@@ -3,10 +3,10 @@
  * テストとワーカー両方で使用して一貫性を確保する
  */
 
-import {Mitsuba} from '../../..';
-import {AMQPBackend} from '../../../backends/amqp';
-import {AMQPBroker} from '../../../brokers/amqp';
-import {SQSBroker} from '../../../brokers/sqs';
+import {Mitsuba} from '@mitsuba/core';
+import {AMQPBackend} from '@mitsuba/amqp-backend';
+import {AMQPBroker} from '@mitsuba/amqp-broker';
+import {SQSBroker} from '@mitsuba/sqs-broker';
 
 export const testTasks = {
   // 基本的なタスク

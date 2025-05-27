@@ -3,8 +3,8 @@
  */
 import {describe, test, expect, beforeEach, afterEach} from 'vitest';
 import {MockBackend} from '../mocks/backend.mock';
-import {TaskRetrievalError, TaskTimeoutError} from '../../errors';
-import type {TaskId} from '../../types';
+import {TaskRetrievalError, TaskTimeoutError} from '@mitsuba/core';
+import type {TaskId} from '@mitsuba/core';
 
 describe('MockBackend 単体テスト', () => {
   let backend: MockBackend;

@@ -1,0 +1,11 @@
+{
+ "extends": "./tsconfig.json",
+ "compilerOptions": {
+   "module": "ESNext",
+   "outDir": "./dist/esm",
+   "tsBuildInfoFile": "./dist/esm/.tsbuildinfo"
+ },
+ "references": [
+    { "path": "../core/tsconfig.mjs.json" }
+ ]
+}

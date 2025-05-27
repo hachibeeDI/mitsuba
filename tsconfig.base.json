@@ -1,18 +1,30 @@
 {
   "compilerOptions": {
-    "target": "esnext",
-    "jsx": "react-jsx",
-    "moduleResolution": "nodenext",
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "esModuleInterop": true,
     "skipLibCheck": true,
+    "strict": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "sourceMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@mitsuba/core": ["packages/core/src"],
+      "@mitsuba/core/*": ["packages/core/src/*"],
+      "@mitsuba/amqp-broker": ["packages/amqp-broker/src"],
+      "@mitsuba/amqp-broker/*": ["packages/amqp-broker/src/*"],
+      "@mitsuba/sqs-broker": ["packages/sqs-broker/src"],
+      "@mitsuba/sqs-broker/*": ["packages/sqs-broker/src/*"],
+      "@mitsuba/amqp-backend": ["packages/amqp-backend/src"],
+      "@mitsuba/amqp-backend/*": ["packages/amqp-backend/src/*"]
+    },
+    "jsx": "react-jsx",
     "incremental": true,
     "tsBuildInfoFile": ".tsbuildinfo",
     "erasableSyntaxOnly": true,
-
-    "declaration": true,
     "declarationMap": true,
-
-    "strict": true,
-
     "noUnusedLocals": true,
     "noUnusedParameters": false,
     "noImplicitReturns": true,
@@ -21,17 +33,11 @@
     "noUncheckedIndexedAccess": true,
     "useUnknownInCatchVariables": true,
     "exactOptionalPropertyTypes": true,
-
     "forceConsistentCasingInFileNames": true,
     "removeComments": true,
-
     "allowSyntheticDefaultImports": true,
-    "esModuleInterop": true,
-    "resolveJsonModule": true,
     "noErrorTruncation": true,
-
     "lib": ["esnext"],
-    "types": ["node"],
-  },
-  "include": ["./src/**/*"]
+    "types": ["node"]
+  }
 }

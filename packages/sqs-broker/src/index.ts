@@ -21,10 +21,10 @@ import {
   isTaskPayload,
   type TaskName,
   type Logger,
-} from '../types';
-import {BrokerConnectionError, BrokerError} from '../errors';
-import {getLogger} from '../logger';
-import {jsonSafeParse} from '../helpers';
+} from '@mitsuba/core';
+import {BrokerConnectionError, BrokerError} from '@mitsuba/core';
+import {getLogger} from '@mitsuba/core';
+import {jsonSafeParse} from '@mitsuba/core';
 
 const PROJECT_DELIMITTER = '__';
 

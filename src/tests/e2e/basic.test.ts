@@ -6,7 +6,7 @@
 
 import {describe, test, expect, beforeAll, afterAll} from 'vitest';
 
-import type {Mitsuba} from '../../index';
+import type {Mitsuba} from '@mitsuba/core';
 import {createApp} from './shared/task-definitions';
 
 const BROKER_URL = process.env.BROKER_URL || 'amqp://guest:guest@rabbitmq:5672';

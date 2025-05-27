@@ -3,7 +3,7 @@
  */
 import {v4 as uuidv4} from 'uuid';
 import {EventEmitter} from 'node:events';
-import type {Broker, TaskPayload, TaskOptions, TaskId, TaskHandlerResult, TaskName} from '../../types';
+import type {Broker, TaskPayload, TaskOptions, TaskId, TaskHandlerResult, TaskName} from '@mitsuba/core';
 
 // 型安全なハンドラー定義
 type TaskHandler = (task: TaskPayload) => Promise<TaskHandlerResult>;

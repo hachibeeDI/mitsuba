@@ -1,9 +1,18 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "module": "commonjs",
-    "moduleResolution": "node",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
     "outDir": "./dist/cjs",
-    "types": ["node"]
-  }
+    "tsBuildInfoFile": "./dist/cjs/.tsbuildinfo"
+  },
+  "files": [],
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/tests/**/*.ts", "node_modules", "dist"],
+  "references": [
+    { "path": "./packages/core/tsconfig.cjs.json" },
+    { "path": "./packages/amqp-broker/tsconfig.cjs.json" },
+    { "path": "./packages/sqs-broker/tsconfig.cjs.json" },
+    { "path": "./packages/amqp-backend/tsconfig.cjs.json" }
+  ]
 }

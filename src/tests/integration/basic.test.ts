@@ -9,8 +9,8 @@ import {expectTypeOf} from 'vitest';
 
 import {MockBroker} from '../mocks/broker.mock';
 import {MockBackend} from '../mocks/backend.mock';
-import {Mitsuba} from '../../index';
-import type {TaskResult} from '../../types';
+import {Mitsuba} from '@mitsuba/core';
+import type {TaskResult} from '@mitsuba/core';
 
 describe('Mitsuba 基本機能テスト', () => {
   // テスト用のモックとMitsubaインスタンス

@@ -4,8 +4,8 @@
 
 import {describe, test, expect, beforeEach, afterEach} from 'vitest';
 import {MockBroker} from '../mocks/broker.mock';
-import type {TaskOptions, TaskPayload, TaskHandlerResult, TaskName} from '../../types';
-import {generateTaskId} from '../../utils';
+import type {TaskOptions, TaskPayload, TaskHandlerResult, TaskName} from '@mitsuba/core';
+import {generateTaskId} from '@mitsuba/core';
 
 describe('MockBroker 単体テスト', () => {
   let broker: MockBroker;

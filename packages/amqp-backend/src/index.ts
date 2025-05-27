@@ -4,10 +4,10 @@
 import type {Channel, ChannelModel} from 'amqplib';
 import {connect} from 'amqplib';
 
-import type {Backend, TaskId, TaskResult} from '../types';
-import {BackendConnectionError, TaskRetrievalError, TaskTimeoutError} from '../errors';
-import {getLogger} from '../logger';
-import {jsonSafeParse} from '../helpers';
+import type {Backend, TaskId, TaskResult} from '@mitsuba/core';
+import {BackendConnectionError, TaskRetrievalError, TaskTimeoutError} from '@mitsuba/core';
+import {getLogger} from '@mitsuba/core';
+import {jsonSafeParse} from '@mitsuba/core';
 import {AssertionError} from 'node:assert';
 
 type ChannelPayload = {

@@ -4,7 +4,7 @@
  */
 
 import {describe, test, expect, beforeAll, afterAll} from 'vitest';
-import {Mitsuba} from '../../index';
+import {Mitsuba} from '@mitsuba/core';
 import {testTasks} from '../e2e/shared/task-definitions';
 import EventEmitter from 'node:events';
 import {MockBroker} from '../mocks/broker.mock';

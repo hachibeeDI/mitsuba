@@ -1,8 +1,16 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "module": "NodeNext",
+    "module": "ESNext",
     "outDir": "./dist/esm",
-    "types": ["node"]
-  }
+    "tsBuildInfoFile": "./dist/esm/.tsbuildinfo"
+  },
+  "files": [],
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "./packages/core/tsconfig.mjs.json" },
+    { "path": "./packages/amqp-broker/tsconfig.mjs.json" },
+    { "path": "./packages/sqs-broker/tsconfig.mjs.json" },
+    { "path": "./packages/amqp-backend/tsconfig.mjs.json" }
+  ]
 }

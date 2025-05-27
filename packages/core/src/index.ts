@@ -17,8 +17,6 @@ import {
   unwrapResult,
   type TaskName,
 } from './types';
-import {AMQPBroker} from './brokers/amqp';
-import {AMQPBackend} from './backends/amqp';
 import {WorkerPool} from './worker';
 import {getLogger, type Logger} from './logger';
 import {generateTaskId} from './utils';
@@ -77,8 +75,8 @@ class TaskProducer<T> implements AsyncResult<T> {
  * Mitsubaメインクラス
  */
 export class Mitsuba {
-  private broker: Broker;
-  private backend: Backend;
+  private broker!: Broker; // Initialized in createBroker
+  private backend!: Backend; // Initialized in createBackend
   private workerPool: WorkerPool | null = null;
   private readonly logger: Logger;
   public readonly name: string;
@@ -89,12 +87,13 @@ export class Mitsuba {
    */
   constructor(name: string, options: MitsubaOptions) {
     this.name = name;
-    this.broker = this.createBroker(options.broker);
-    this.backend = this.createBackend(options.backend);
     this.logger = getLogger();
     if (options.logger?.level) {
       this.logger.setLevel(options.logger.level);
     }
+    // Broker and Backend are initialized after logger setup
+    this.broker = this.createBroker(options.broker);
+    this.backend = this.createBackend(options.backend);
   }
 
   /**
@@ -106,12 +105,8 @@ export class Mitsuba {
     if (typeof broker !== 'string') {
       return broker;
     }
-
-    if (broker.startsWith('amqp://')) {
-      return new AMQPBroker(this.name, broker);
-    }
-
-    throw new Error(`Unsupported broker protocol: ${broker}`);
+    // Broker creation logic will be handled by specific broker packages or a factory
+    throw new Error(`Broker resolution for protocol from string URI is not supported in core. Please provide an instance of a Broker. Protocol: ${broker}`);
   }
 
   /**
@@ -123,12 +118,8 @@ export class Mitsuba {
     if (typeof backend !== 'string') {
       return backend;
     }
-
-    if (backend.startsWith('amqp://')) {
-      return new AMQPBackend(backend, this.name);
-    }
-
-    throw new Error(`Unsupported backend protocol: ${backend}`);
+    // Backend creation logic will be handled by specific backend packages or a factory
+    throw new Error(`Backend resolution for protocol from string URI is not supported in core. Please provide an instance of a Backend. Protocol: ${backend}`);
   }
 
   /**
@@ -247,4 +238,30 @@ export function mitsuba(name: string, options: MitsubaOptions): Mitsuba {
 }
 
 // 必要なタイプのエクスポート
-export type {MitsubaOptions, AsyncResult as AsyncTask, TaskOptions, TaskStatus, TaskPayload, WorkerPoolState} from './types';
+export type {
+  MitsubaOptions,
+  Broker,
+  Backend,
+  TaskDefinition,
+  AsyncResult as AsyncTask,
+  TaskOptions,
+  TaskStatus,
+  TaskPayload,
+  CreatedTask,
+  TaskId,
+  TaskResult,
+  TaskName,
+  WorkerPoolState,
+  TaskHandlerResult, // Added
+} from './types';
+export {unwrapResult, isTaskPayload} from './types'; // isTaskPayload moved here
+
+// Export errors
+export * from './errors';
+
+// Export logger
+export {getLogger, type Logger} from './logger'; // getLogger and Logger type
+
+// Export helpers
+export {jsonSafeParse, pooling} from './helpers'; // jsonSafeParse and pooling
+export {generateTaskId} from './utils'; // generateTaskId for tests

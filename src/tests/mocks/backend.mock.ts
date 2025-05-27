@@ -2,9 +2,9 @@
  * バックエンドのモック実装
  */
 import {EventEmitter} from 'node:events';
-import type {Backend, TaskId, TaskResult} from '../../types';
-import {TaskRetrievalError, TaskTimeoutError} from '../../errors';
-import {pooling} from '../../helpers';
+import type {Backend, TaskId, TaskResult} from '@mitsuba/core';
+import {TaskRetrievalError, TaskTimeoutError} from '@mitsuba/core';
+import {pooling} from '@mitsuba/core';
 
 type StoredResult<T> = TaskResult<T> & {expiresAt?: number};
 
@@ -112,7 +112,7 @@ export class MockBackend implements Backend {
       {interval, maxRetry: Math.min(timeout, 50)},
     )
       .then(cb)
-      .catch((_err) => ({status: 'failure', error: new TaskTimeoutError(taskId, timeout)}));
+      .catch((_err: any) => ({status: 'failure', error: new TaskTimeoutError(taskId, timeout)}));
   }
 
   async getResult<T>(taskId: TaskId, timeout = 5000): Promise<TaskResult<T>> {
@@ -158,7 +158,7 @@ export class MockBackend implements Backend {
         return {continue: false, v: r};
       },
       {interval, maxRetry: Math.min(timeout, 50)},
-    ).catch((_err) => ({status: 'failure', error: new TaskTimeoutError(taskId, timeout)}));
+    ).catch((_err: any) => ({status: 'failure', error: new TaskTimeoutError(taskId, timeout)}));
   }
 
   // モックテスト用のヘルパーメソッド

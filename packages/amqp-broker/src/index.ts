@@ -4,10 +4,10 @@
 import type {Channel, ChannelModel, Options, Replies} from 'amqplib';
 import {connect} from 'amqplib';
 
-import {type Broker, type TaskId, type TaskOptions, type TaskPayload, type TaskHandlerResult, isTaskPayload, type TaskName} from '../types';
-import {BrokerConnectionError, BrokerError} from '../errors';
-import {getLogger} from '../logger';
-import {jsonSafeParse} from '../helpers';
+import {type Broker, type TaskId, type TaskOptions, type TaskPayload, type TaskHandlerResult, isTaskPayload, type TaskName} from '@mitsuba/core';
+import {BrokerConnectionError, BrokerError} from '@mitsuba/core';
+import {getLogger} from '@mitsuba/core';
+import {jsonSafeParse} from '@mitsuba/core';
 
 export type AMQPBrokerOptions = {
   /** 接続オプション */
