@@ -89,7 +89,11 @@ jobs:
           npm run e2e:setup
           echo "Waiting for services to start..."
           sleep 15
-          npm run test:e2e:rabbitmq || npm run e2e:logs:rabbitmq
+          if ! npm run test:e2e:rabbitmq; then
+            npm run e2e:logs:rabbitmq
+            npm run e2e:clean
+            exit 1
+          fi
           npm run e2e:clean
       
       - name: Run e2e tests - SQS
@@ -97,5 +101,9 @@ jobs:
           npm run e2e:setup
           echo "Waiting for services to start..."
           sleep 15
-          npm run test:e2e:sqs
+          if ! npm run test:e2e:sqs; then
+            npm run e2e:logs:sqs
+            npm run e2e:clean
+            exit 1
+          fi
           npm run e2e:clean 
