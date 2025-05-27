@@ -34,11 +34,9 @@
     "fix:lint": "pnpm run check:lint -- --fix",
     "fix:style": "pnpm run check:style -- --write",
     "fix-all": "pnpm run fix:style && pnpm run fix:lint",
-
     "build": "pnpm run build:cjs && pnpm run build:mjs",
     "build:cjs": "tsc -b tsconfig.cjs.json",
     "build:mjs": "tsc -b tsconfig.mjs.json",
-
     "e2e:setup": "docker compose up -d",
     "e2e:status": "docker compose ps",
     "e2e:logs": "docker compose logs",
@@ -46,16 +44,13 @@
     "e2e:clean": "docker compose down -v",
     "e2e:rebuild": "docker compose build worker worker-2 sqs-worker",
     "e2e:run": "pnpm run e2e:setup && echo \"Waiting for services to start...\" && sleep 10",
-
     "pretest": "pnpm run e2e:run && pnpm run test:e2e && pnpm run e2e:clean",
     "test": "vitest run",
-
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:e2e:sqs": "BACKEND_URL=amqp://guest:guest@localhost:5672 BROKER_URL=sqs://localhost:9324 pnpm exec vitest run tests/e2e",
     "test:e2e:rabbitmq": "BACKEND_URL=amqp://guest:guest@localhost:5672 BROKER_URL=amqp://guest:guest@localhost:5672 pnpm exec vitest run tests/e2e",
     "test:e2e": "pnpm run test:e2e:sqs && pnpm run test:e2e:rabbitmq",
-
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
   },

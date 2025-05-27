@@ -24,8 +24,11 @@
     "build:esm": "tsc -p tsconfig.mjs.json",
     "check:type": "tsc -p tsconfig.mjs.json --noEmit"
   },
-  "dependencies": {},
+  "dependencies": {
+    "uuid": "^11.1.0"
+  },
   "devDependencies": {
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "@types/uuid": "^10.0.0"
   }
 }
