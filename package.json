@@ -43,8 +43,6 @@
     "e2e:setup": "docker compose up -d",
     "e2e:status": "docker compose ps",
     "e2e:logs": "docker compose logs",
-    "e2e:logs:worker": "docker compose logs worker",
-    "e2e:logs:rabbitmq": "docker compose logs rabbitmq",
     "e2e:stop": "docker compose stop",
     "e2e:clean": "docker compose down -v",
     "e2e:rebuild": "docker compose build worker worker-2 sqs-worker",

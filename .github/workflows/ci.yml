@@ -88,9 +88,10 @@ jobs:
         run: |
           npm run e2e:setup
           echo "Waiting for services to start..."
-          sleep 15
+          sleep 10
           if ! npm run test:e2e:rabbitmq; then
-            npm run e2e:logs:rabbitmq
+            docker compose logs rabbitmq
+            docker compose logs worker
             npm run e2e:clean
             exit 1
           fi
@@ -100,9 +101,10 @@ jobs:
         run: |
           npm run e2e:setup
           echo "Waiting for services to start..."
-          sleep 15
+          sleep 10
           if ! npm run test:e2e:sqs; then
-            npm run e2e:logs:sqs
+            docker compose logs elasticmq
+            docker compose logs sqs-worker
             npm run e2e:clean
             exit 1
           fi
