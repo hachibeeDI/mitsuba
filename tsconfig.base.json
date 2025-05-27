@@ -48,6 +48,12 @@
     { "path": "./packages/sqs-broker" }
   ],
 
+  "files": [],
+
+  "exclude": [
+    "vitest.config.ts", "node_modules/*"
+  ],
+
   "ts-node": {
     "require": ["tsconfig-paths/register"]
   }

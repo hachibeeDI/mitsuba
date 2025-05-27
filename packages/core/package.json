@@ -1,6 +1,6 @@
 {
   "name": "@mitsuba/core",
-  "version": "0.0.2",
+  "version": "0.0.1",
   "description": "Celery port for TypeScript",
   "private": false,
   "main": "./dist/cjs/index.js",

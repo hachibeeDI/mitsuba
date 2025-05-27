@@ -1,7 +1,6 @@
 {
   "name": "@mitsuba/amqp-backend",
   "version": "0.0.1",
-  "private": true,
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
   "types": "./dist/esm/index.d.ts",
