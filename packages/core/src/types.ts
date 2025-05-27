@@ -198,10 +198,8 @@ export function isTaskPayload(payload: unknown): payload is TaskPayload {
  * Mitsubaシステム全体の設定
  */
 export type MitsubaOptions = {
-  /** ブローカーURL または ブローカーインスタンス */
-  broker: string | Broker;
-  /** バックエンドURL または バックエンドインスタンス */
-  backend: string | Backend;
+  broker: Broker;
+  backend: Backend;
   /** インクルードするタスクモジュール */
   include?: ReadonlyArray<string>;
   /** 結果の有効期限（秒単位） */

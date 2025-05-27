@@ -75,8 +75,8 @@ class TaskProducer<T> implements AsyncResult<T> {
  * Mitsubaメインクラス
  */
 export class Mitsuba {
-  private broker!: Broker; // Initialized in createBroker
-  private backend!: Backend; // Initialized in createBackend
+  private broker: Broker;
+  private backend: Backend;
   private workerPool: WorkerPool | null = null;
   private readonly logger: Logger;
   public readonly name: string;
@@ -91,35 +91,8 @@ export class Mitsuba {
     if (options.logger?.level) {
       this.logger.setLevel(options.logger.level);
     }
-    // Broker and Backend are initialized after logger setup
-    this.broker = this.createBroker(options.broker);
-    this.backend = this.createBackend(options.backend);
-  }
-
-  /**
-   * @param broker - ブローカーURLまたはブローカーインスタンス
-   * @returns ブローカーインスタンス
-   * @throws サポートされていないプロトコルの場合
-   */
-  private createBroker(broker: string | Broker): Broker {
-    if (typeof broker !== 'string') {
-      return broker;
-    }
-    // Broker creation logic will be handled by specific broker packages or a factory
-    throw new Error(`Broker resolution for protocol from string URI is not supported in core. Please provide an instance of a Broker. Protocol: ${broker}`);
-  }
-
-  /**
-   * @param backend - バックエンドURLまたはバックエンドインスタンス
-   * @returns バックエンドインスタンス
-   * @throws サポートされていないプロトコルの場合
-   */
-  private createBackend(backend: string | Backend): Backend {
-    if (typeof backend !== 'string') {
-      return backend;
-    }
-    // Backend creation logic will be handled by specific backend packages or a factory
-    throw new Error(`Backend resolution for protocol from string URI is not supported in core. Please provide an instance of a Backend. Protocol: ${backend}`);
+    this.broker = options.broker;
+    this.backend = options.backend;
   }
 
   /**
