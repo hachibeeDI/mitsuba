@@ -82,7 +82,7 @@ jobs:
         run: |
           npm run e2e:setup
           echo "Waiting for services to start..."
-          sleep 15
+          sleep 30
           npm run test:e2e:rabbitmq
           npm run e2e:clean
       
@@ -90,6 +90,6 @@ jobs:
         run: |
           npm run e2e:setup
           echo "Waiting for services to start..."
-          sleep 15
+          sleep 30
           npm run test:e2e:sqs
           npm run e2e:clean 

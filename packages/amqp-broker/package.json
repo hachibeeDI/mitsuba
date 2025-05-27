@@ -24,11 +24,14 @@
     "check:type": "tsc -p tsconfig.mjs.json --noEmit"
   },
   "dependencies": {
-    "amqplib": "^0.10.8",
+    "amqplib": "^0.10.8"
+  },
+  "peerDependencies": {
     "@mitsuba/core": "0.0.1"
   },
   "devDependencies": {
     "typescript": "^5.8.3",
-    "@types/amqplib": "^0.10.7"
+    "@types/amqplib": "^0.10.7",
+    "@mitsuba/core": "0.0.1"
   }
 }
