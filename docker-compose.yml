@@ -13,10 +13,10 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD", "rabbitmqctl", "status"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
-      retries: 5
-      start_period: 15s
+      retries: 10
+      start_period: 10s
     command: >
       bash -c "rabbitmq-plugins enable rabbitmq_prometheus && rabbitmq-server"
 
@@ -27,13 +27,15 @@ services:
       - "9324:9324"  # SQS protocol port
       - "9325:9325"  # Management UI port (if available)
     volumes:
-      - ./src/tests/e2e/config/elasticmq.conf:/opt/elasticmq.conf
+      - ./tests/e2e/config/elasticmq.conf:/opt/elasticmq.conf
+    healthcheck:
+      test: [ "CMD", "curl",  "--fail" , "http://localhost:9324/health" ]
 
   # E2Eテスト用ワーカープロセス
   worker:
     build:
       context: .
-      dockerfile: src/tests/e2e/workers/Dockerfile
+      dockerfile: tests/e2e/workers/Dockerfile
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -44,12 +46,20 @@ services:
       - CONCURRENCY=3
       - APP_NAME=e2e-test-worker
     restart: unless-stopped
+    # Dockerが終了したりホストが終了したりした場合はworkerをすぐに終了するように設定
+    stop_grace_period: 10s
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep 'ts-node' | grep -v grep || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
 
   # 複数ワーカーテスト用
   worker-2:
     build:
       context: .
-      dockerfile: src/tests/e2e/workers/Dockerfile
+      dockerfile: tests/e2e/workers/Dockerfile
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -60,16 +70,21 @@ services:
       - CONCURRENCY=2
       - APP_NAME=e2e-test-worker
     restart: unless-stopped
+    stop_grace_period: 10s
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep 'ts-node' | grep -v grep || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
 
   sqs-worker:
     build:
       context: .
-      dockerfile: src/tests/e2e/workers/Dockerfile
+      dockerfile: tests/e2e/workers/Dockerfile
     depends_on:
-      rabbitmq:
-        condition: service_healthy
       elasticmq:
-        condition: service_started
+        condition: service_healthy
     environment:
       - BROKER_URL=sqs://elasticmq:9324
       - BACKEND_URL=amqp://guest:guest@rabbitmq:5672
@@ -77,6 +92,13 @@ services:
       - CONCURRENCY=1
       - APP_NAME=e2e-test-worker
     restart: unless-stopped
+    stop_grace_period: 10s
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep 'ts-node' | grep -v grep || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
 
 volumes:
   rabbitmq_data: 

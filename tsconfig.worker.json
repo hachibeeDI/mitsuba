@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "esModuleInterop": true,
+  },
+  "files": [],
+  "include": ["tests/**/*"],
+  "references": [
+    { "path": "./packages/core/tsconfig.cjs.json" },
+    { "path": "./packages/amqp-broker/tsconfig.cjs.json" },
+    { "path": "./packages/sqs-broker/tsconfig.cjs.json" },
+    { "path": "./packages/amqp-backend/tsconfig.cjs.json" }
+  ]
+} 
