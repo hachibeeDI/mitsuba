@@ -18,7 +18,7 @@
     }
   },
   "scripts": {
-    "build": "npm run build:cjs && npm run build:esm",
+    "build": "pnpm run build:cjs && pnpm run build:esm",
     "build:cjs": "tsc -p tsconfig.cjs.json",
     "build:esm": "tsc -p tsconfig.mjs.json",
     "check:type": "tsc -p tsconfig.mjs.json --noEmit"
@@ -27,11 +27,11 @@
     "amqplib": "^0.10.8"
   },
   "peerDependencies": {
-    "@mitsuba/core": "0.0.1"
+    "@mitsuba/core": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.8.3",
     "@types/amqplib": "^0.10.7",
-    "@mitsuba/core": "0.0.1"
+    "@mitsuba/core": "workspace:*"
   }
 }

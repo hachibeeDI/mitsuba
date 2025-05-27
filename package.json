@@ -27,15 +27,15 @@
     "src"
   ],
   "scripts": {
-    "check:type": "npm run --workspaces check:type",
+    "check:type": "pnpm --filter \"@mitsuba/*\" run check:type",
     "check:lint": "biome lint packages/ tests/ --vcs-use-ignore-file=true",
     "check:style": "biome format packages/ tests/ --vcs-use-ignore-file=true",
-    "check-all": "npm run check:type && npm run check:lint && npm run check:style",
-    "fix:lint": "npm run check:lint -- --fix",
-    "fix:style": "npm run check:style -- --write",
-    "fix-all": "npm run fix:style && npm run fix:lint",
+    "check-all": "pnpm run check:type && pnpm run check:lint && pnpm run check:style",
+    "fix:lint": "pnpm run check:lint -- --fix",
+    "fix:style": "pnpm run check:style -- --write",
+    "fix-all": "pnpm run fix:style && pnpm run fix:lint",
 
-    "build": "npm run build:cjs && npm run build:mjs",
+    "build": "pnpm run build:cjs && pnpm run build:mjs",
     "build:cjs": "tsc -b tsconfig.cjs.json",
     "build:mjs": "tsc -b tsconfig.mjs.json",
 
@@ -45,16 +45,16 @@
     "e2e:stop": "docker compose stop",
     "e2e:clean": "docker compose down -v",
     "e2e:rebuild": "docker compose build worker worker-2 sqs-worker",
-    "e2e:run": "npm run e2e:setup && echo \"Waiting for services to start...\" && sleep 10",
+    "e2e:run": "pnpm run e2e:setup && echo \"Waiting for services to start...\" && sleep 10",
 
-    "pretest": "npm run e2e:run && npm run test:e2e && npm run e2e:clean",
+    "pretest": "pnpm run e2e:run && pnpm run test:e2e && pnpm run e2e:clean",
     "test": "vitest run",
 
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
-    "test:e2e:sqs": "BACKEND_URL=amqp://guest:guest@localhost:5672 BROKER_URL=sqs://localhost:9324 npx vitest run tests/e2e",
-    "test:e2e:rabbitmq": "BACKEND_URL=amqp://guest:guest@localhost:5672 BROKER_URL=amqp://guest:guest@localhost:5672 npx vitest run tests/e2e",
-    "test:e2e": "npm run test:e2e:sqs; npm run test:e2e:rabbitmq",
+    "test:e2e:sqs": "BACKEND_URL=amqp://guest:guest@localhost:5672 BROKER_URL=sqs://localhost:9324 pnpm exec vitest run tests/e2e",
+    "test:e2e:rabbitmq": "BACKEND_URL=amqp://guest:guest@localhost:5672 BROKER_URL=amqp://guest:guest@localhost:5672 pnpm exec vitest run tests/e2e",
+    "test:e2e": "pnpm run test:e2e:sqs && pnpm run test:e2e:rabbitmq",
 
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
