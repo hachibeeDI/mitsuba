@@ -11,6 +11,8 @@
     "sourceMap": true,
     "baseUrl": ".",
     "paths": {
+      "@tests/shared": ["tests/shared"],
+
       "@mitsuba/core": ["packages/core/src"],
       "@mitsuba/core/*": ["packages/core/src/*"],
       "@mitsuba/amqp-broker": ["packages/amqp-broker/src"],
@@ -39,5 +41,8 @@
     "noErrorTruncation": true,
     "lib": ["esnext"],
     "types": ["node"]
+  },
+  "ts-node": {
+    "require": ["tsconfig-paths/register"]
   }
 }

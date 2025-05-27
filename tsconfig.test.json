@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "paths": {
+    "@tests/e2e/shared": ["tests/e2e/shared"],
+    // "@tests/e2e/*": ["tests/e2e/*"],
+  },
+  "files": [],
+  "include": ["tests/**/*"],
+  "references": [
+    { "path": "./packages/core/tsconfig.mjs.json" },
+    { "path": "./packages/amqp-broker/tsconfig.mjs.json" },
+    { "path": "./packages/sqs-broker/tsconfig.mjs.json" },
+    { "path": "./packages/amqp-backend/tsconfig.mjs.json" }
+  ]
+}

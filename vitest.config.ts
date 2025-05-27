@@ -14,7 +14,7 @@ export default defineConfig({
     alias,
     globals: true,
     environment: 'node',
-    include: ['src/tests/**/*.test.{ts,js}', 'packages/*/src/**/*.test.{ts,js}'],
+    include: ['tests/**/*.test.{ts,js}', 'packages/*/src/**/*.test.{ts,js}'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
