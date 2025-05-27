@@ -4,12 +4,8 @@
     "module": "CommonJS",
     "moduleResolution": "Node",
     "esModuleInterop": true,
-    "paths": {
-      "@tests/shared": ["tests/shared"],
-      "@tests/shared/*": ["tests/shared/*"]
-    }
   },
-  "files": ["test-worker.ts"],
+  "files": [],
   "include": ["tests/**/*"],
   "references": [
     { "path": "./packages/core/tsconfig.cjs.json" },

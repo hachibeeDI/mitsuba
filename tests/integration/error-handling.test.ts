@@ -8,7 +8,7 @@ import EventEmitter from 'node:events';
 import {describe, test, expect, beforeAll, afterAll} from 'vitest';
 import {Mitsuba} from '@mitsuba/core';
 
-import {testTasks} from '@tests/shared/task-definitions';
+import {testTasks} from '../shared/task-definitions';
 import {MockBroker} from '../mocks/broker.mock';
 import {MockBackend} from '../mocks/backend.mock';
 
