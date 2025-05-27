@@ -1,7 +1,8 @@
 {
   "name": "@mitsuba/core",
-  "version": "0.0.1",
-  "private": true,
+  "version": "0.0.2",
+  "description": "Celery port for TypeScript",
+  "private": false,
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
   "types": "./dist/esm/index.d.ts",
@@ -23,9 +24,7 @@
     "build:esm": "tsc -p tsconfig.mjs.json",
     "check:type": "tsc -p tsconfig.mjs.json --noEmit"
   },
-  "dependencies": {
-    "fp-ts": "^2.16.9"
-  },
+  "dependencies": {},
   "devDependencies": {
     "typescript": "^5.8.3"
   }

@@ -8,6 +8,7 @@
     "strict": true,
     "resolveJsonModule": true,
     "declaration": true,
+    "composite": true,
     "sourceMap": true,
     "baseUrl": ".",
     "paths": {
@@ -18,6 +19,7 @@
       "@mitsuba/sqs-broker/*": ["packages/sqs-broker/src/*"],
       "@mitsuba/amqp-backend/*": ["packages/amqp-backend/src/*"]
     },
+
     "jsx": "react-jsx",
     "incremental": true,
     "tsBuildInfoFile": ".tsbuildinfo",
@@ -38,6 +40,14 @@
     "lib": ["esnext"],
     "types": ["node"]
   },
+
+  "references": [
+    { "path": "./packages/core" },
+    { "path": "./packages/amqp-broker" },
+    { "path": "./packages/amqp-backend" },
+    { "path": "./packages/sqs-broker" }
+  ],
+
   "ts-node": {
     "require": ["tsconfig-paths/register"]
   }
